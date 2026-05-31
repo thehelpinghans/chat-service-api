@@ -9,10 +9,10 @@ C2C(Consumer-to-Consumer) 채팅 기반 결제 SaaS 플랫폼.
 
 | 항목 | 내용 |
 |------|------|
-| Language | Java 25 (Virtual Threads) |
+| Language | Java 25 |
 | Framework | Spring Boot 3.5.9 |
 | Build | Gradle 8.14 |
-| ORM | Spring Data JPA + QueryDSL 5.0.0 |
+| ORM | Spring Data JPA + QueryDSL 6.12 (io.github.openfeign.querydsl)  |
 | Realtime | Spring WebSocket (STOMP) |
 | DB (dev) | H2 in-memory (MySQL compatibility mode) |
 | Docs | springdoc-openapi 2.8.9 |
