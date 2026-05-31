@@ -1,0 +1,96 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.9'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.chatpay'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    querydslVersion = '6.12'
+    springdocVersion = '2.8.17'
+    jjwtVersion = '0.13.0'
+}
+
+dependencies {
+    // Spring Boot Web (Spring MVC)
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // Spring Data JPA
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // Spring Validation
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // WebSocket
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
+    // JWT (JJWT)
+    implementation "io.jsonwebtoken:jjwt-api:${jjwtVersion}"
+    runtimeOnly "io.jsonwebtoken:jjwt-impl:${jjwtVersion}"
+    runtimeOnly "io.jsonwebtoken:jjwt-jackson:${jjwtVersion}"
+
+    // Virtual Thread 활성화 (Java 25 + JEP 491)
+    // application.properties 에서 spring.threads.virtual.enabled=true 로 활성화
+
+    // QueryDSL (OpenFeign fork — 6.x부터 Jakarta 기본, querydsl-jpa classifier 불필요)
+    implementation "io.github.openfeign.querydsl:querydsl-jpa:${querydslVersion}"
+    annotationProcessor "io.github.openfeign.querydsl:querydsl-apt:${querydslVersion}:jakarta"
+    annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
+    annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // springdoc-openapi (Swagger UI 포함)
+    // Spring Boot 3.5.x 호환: 2.8.x 이상 필요
+    implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+
+    // Database Driver (추후 MySQL 또는 PostgreSQL 선택 후 주석 해제)
+    // runtimeOnly 'com.mysql:mysql-connector-j'
+    // runtimeOnly 'org.postgresql:postgresql'
+
+    // H2 (개발/테스트용 인메모리 DB)
+    runtimeOnly 'com.h2database:h2'
+
+    // Test
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// QueryDSL Q클래스 생성 경로 설정
+def querydslDir = layout.buildDirectory.dir("generated/querydsl").get().asFile.path
+
+sourceSets {
+    main {
+        java {
+            srcDirs += [querydslDir]
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.getGeneratedSourceOutputDirectory().set(file(querydslDir))
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

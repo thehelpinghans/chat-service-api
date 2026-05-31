@@ -1,0 +1,36 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Java
+*.class
+*.jar
+
+# Logs
+*.log
+logs/
+
+# Claude Code 로컬 설정
+.claude/settings.local.json
+
+# 시크릿 포함 설정 파일
+src/main/resources/application.yml
+src/main/resources/application-prod.yml
+src/main/resources/data.sql
+
+# 로컬 개발 문서
+CLAUDE.md

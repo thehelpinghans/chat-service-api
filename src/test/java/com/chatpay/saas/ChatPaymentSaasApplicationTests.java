@@ -1,0 +1,12 @@
+package com.chatpay.saas;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class ChatPaymentSaasApplicationTests {
+
+    @Test
+    void contextLoads() {
+    }
+}
