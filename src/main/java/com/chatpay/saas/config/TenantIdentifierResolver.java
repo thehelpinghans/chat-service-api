@@ -14,16 +14,13 @@ public class TenantIdentifierResolver
         implements CurrentTenantIdentifierResolver<Long>, HibernatePropertiesCustomizer {
 
     static final String TENANT_ATTRIBUTE = "CURRENT_TENANT_ID";
-    // WebSocket은 HTTP 필터를 거치지 않아 RequestAttributes 없음 → tenant를 ThreadLocal로 전달
-    private static final ThreadLocal<Long> THREAD_LOCAL_TENANT = new ThreadLocal<>();
 
     @Override
     public Long resolveCurrentTenantIdentifier() {
         RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
         //앱 시작, 테넌트 없는 시스템 컨텍스트
         if (requestAttributes == null) {
-            Long tenantId = THREAD_LOCAL_TENANT.get();
-            return tenantId != null ? tenantId : 0L;
+            return 0L;
         }
         //실제 HTTP 요청
         Long tenantId = (Long) requestAttributes.getAttribute(TENANT_ATTRIBUTE, RequestAttributes.SCOPE_REQUEST);
@@ -45,11 +42,4 @@ public class TenantIdentifierResolver
         hibernateProperties.put(AvailableSettings.MULTI_TENANT_IDENTIFIER_RESOLVER, this);
     }
 
-    public void setTenantId(Long tenantId) {
-        THREAD_LOCAL_TENANT.set(tenantId);
-    }
-
-    public void clear() {
-        THREAD_LOCAL_TENANT.remove();
-    }
 }

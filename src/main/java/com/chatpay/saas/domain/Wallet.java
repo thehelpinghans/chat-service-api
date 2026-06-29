@@ -21,7 +21,7 @@ public class Wallet extends BaseEntity {
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id")
     private User user;
-
+    //지갑 제외: 결제 이력만 테넌트에 훅으로 전송 -> 여기서는 결재 이력만 관리
     @Version
     private Long version;
 

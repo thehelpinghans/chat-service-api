@@ -33,6 +33,7 @@ public class Item extends BaseEntity {
     @OneToMany(mappedBy = "item")
     private List<Trade> trades = new ArrayList<>();
 
+    //빌더 메서드로 변경
     public static Item create(String externalItemId, String name, Long price) {
         Item item = new Item();
         item.externalItemId = externalItemId;

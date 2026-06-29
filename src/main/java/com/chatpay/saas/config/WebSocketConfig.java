@@ -1,6 +1,5 @@
 package com.chatpay.saas.config;
 
-import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
@@ -22,8 +21,6 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    // JwtProvider를 주입받아 CONNECT 시 토큰 검증에 사용
-    // TODO: 생성자 주입으로 JwtProvider 추가 필요
     private final JwtProvider jwtProvider;
 
     @Override
@@ -36,10 +33,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        // /app 으로 시작하는 메시지 → @MessageMapping 핸들러로 라우팅
-        // 예: 클라이언트가 /app/chat/1 로 전송 → @MessageMapping("/chat/{chatRoomId}") 진입
-        config.setApplicationDestinationPrefixes("/app");
-
         // /topic 으로 시작하는 경로를 구독한 클라이언트에게 메시지 브로드캐스트
         // 예: 클라이언트가 /topic/chat/1 구독 → 해당 채팅방 메시지 수신
         config.enableSimpleBroker("/topic");
@@ -47,6 +40,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
+        // STOMP CONNECT 시 JWT 서명 검증 — 미인증 클라이언트의 /topic 구독 차단
+        // WebSocket은 서버→클라이언트 push 전용이므로 세션에 tenantId/userId 저장 불필요
+        // 메시지 저장(INSERT)은 HTTP POST에서 처리하며, JWT 파싱은 해당 요청에서 별도 수행
         registration.interceptors(new ChannelInterceptor() {
             @Override
             public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -54,17 +50,14 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 if (accessor == null) return message;
 
                 if (StompCommand.CONNECT.equals(accessor.getCommand())) {
-                    // 1. STOMP 헤더에서 토큰 추출
-                    String token = accessor.getFirstNativeHeader("Authorization");
-                    // 2. 토큰 유효성 검증
-                    // 3. 토큰에서 tenantId 추출 후 WebSocket 세션에 저장
+                    String authHeader = accessor.getFirstNativeHeader("Authorization");
+                    if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                        throw new MessageDeliveryException("Missing or malformed Authorization header");
+                    }
                     try {
-                        Claims claims = jwtProvider.getClaims(token); //실패 시 연결 거부 처리
-                        accessor.getSessionAttributes().put("tenantId", claims.get("tenantId", Long.class));
-                        accessor.getSessionAttributes().put("userId", claims.get("userId", Long.class));
+                        jwtProvider.getClaims(authHeader.substring(7));
                     } catch (JwtException | IllegalArgumentException e) {
                         throw new MessageDeliveryException(e.getMessage());
-                        //throw new MessageDeliveryException("유효하지 않은 토큰"); 운영시 처리
                     }
                 }
                 return message;

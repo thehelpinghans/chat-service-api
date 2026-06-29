@@ -85,9 +85,9 @@
             return;
         }
 
-        log('POST /api/v1/chats 요청 중...', 'info');
+        log('POST /api/v1/chat-rooms 요청 중...', 'info');
         try {
-            const res = await fetch('/api/v1/chats', {
+            const res = await fetch('/api/v1/chat-rooms', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -134,7 +134,7 @@
 
         client = new StompJs.Client({
             brokerURL: 'ws://localhost:8080/ws',
-            connectHeaders: { Authorization: token },
+            connectHeaders: { Authorization: 'Bearer ' + token },
             onConnect: () => {
                 setStatus('연결됨 (chatRoomId: ' + chatRoomId + ')', true);
                 log('CONNECT 성공', 'info');
@@ -166,18 +166,37 @@
         if (client) { client.deactivate(); client = null; }
     }
 
-    function sendMessage() {
-        if (!client || !client.connected) { alert('먼저 연결하세요.'); return; }
+    async function sendMessage() {
+        const token = document.getElementById('token').value.trim();
         const chatRoomId = document.getElementById('chatRoomId').value;
         const content = document.getElementById('content').value.trim();
         const messageType = document.getElementById('messageType').value;
 
+        if (!token) { alert('토큰을 입력하세요.'); return; }
         if (!content) { alert('내용을 입력하세요.'); return; }
 
         const body = JSON.stringify({ content, messageType });
-        client.publish({ destination: '/app/chat/' + chatRoomId, body });
-        log('전송: ' + body, 'send');
-        document.getElementById('content').value = '';
+        try {
+            const res = await fetch('/api/v1/chat-rooms/' + chatRoomId + '/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body
+            });
+
+            if (!res.ok) {
+                const text = await res.text();
+                log('전송 실패 ' + res.status + ': ' + text, 'error');
+                return;
+            }
+
+            log('전송: ' + body, 'send');
+            document.getElementById('content').value = '';
+        } catch (e) {
+            log('전송 fetch 실패: ' + e.message, 'error');
+        }
     }
 
     function clearLog() {
