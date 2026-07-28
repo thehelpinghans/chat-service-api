@@ -1,20 +1,19 @@
 package com.chatpay.saas.controller;
 
 import com.chatpay.saas.config.TenantFilter;
-import com.chatpay.saas.dto.chat.ChatMessageRequest;
-import com.chatpay.saas.dto.chat.ChatMessageResponse;
+import com.chatpay.saas.dto.chat.chatmessage.ChatMessageRequest;
+import com.chatpay.saas.dto.chat.chatmessage.ChatMessageResponse;
 import com.chatpay.saas.service.chat.ChatMessageService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 /**
- * 구매자 브라우저의 채팅 메시지 전송·조회 엔드포인트.
+ * 구매자 브라우저(우리 SDK/iframe 경유)의 채팅 메시지 전송·조회 엔드포인트. Bearer 전용.
  *
  * 인증: TenantFilter가 사전에 JWT를 검증하고
  *       tenantId → TenantIdentifierResolver(Hibernate 멀티테넌시 자동 적용)
@@ -26,14 +25,11 @@ import java.util.List;
 public class ChatMessageController {
 
     private final ChatMessageService chatMessageService;
-    private final SimpMessagingTemplate messagingTemplate; // @EnableWebSocketMessageBroker가 자동 빈 등록
 
     /**
-     * 메시지 저장 후 해당 채팅방 구독자 전체에게 STOMP 브로드캐스트.
+     * 메시지 저장 + STOMP 브로드캐스트(ChatMessageService.sendMessage 내부에서 처리).
      *
      * userId: TenantFilter → RequestAttributes → 여기서 수령
-     * 저장 결과: ChatMessageService → ChatMessageResponse
-     * 브로드캐스트: /topic/chat/{chatRoomId} 구독 중인 판매자·구매자 브라우저로 전달
      */
     @PostMapping("/{chatRoomId}/messages")
     @Operation(summary = "채팅 메시지 전송")
@@ -41,9 +37,7 @@ public class ChatMessageController {
             @PathVariable Long chatRoomId,
             @RequestBody @Valid ChatMessageRequest request,
             @RequestAttribute(TenantFilter.USER_ATTRIBUTE) Long userId) {
-        ChatMessageResponse response = chatMessageService.saveMessage(chatRoomId, userId, request);
-        messagingTemplate.convertAndSend("/topic/chat/" + chatRoomId, response);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(chatMessageService.sendMessage(chatRoomId, userId, request));
     }
 
     /**

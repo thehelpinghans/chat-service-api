@@ -10,21 +10,20 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class ItemService {
 
     private final ItemRepository itemRepository;
 
+    @Transactional
     public Item getOrCreateItem(String externalItemId, String itemName, Long itemPrice) {
         Optional<Item> existingItem = itemRepository.findByExternalItemId(externalItemId);
-        Item item;
         if (existingItem.isPresent()) {
-            item = existingItem.get();
+            Item item = existingItem.get();
             item.update(itemName, itemPrice);
-        } else {
-            item = Item.create(externalItemId, itemName, itemPrice);
+            itemRepository.save(item);
+            return item;
         }
-        itemRepository.save(item);
-        return item;
+
+        return itemRepository.save(Item.create(externalItemId, itemName, itemPrice));
     }
 }

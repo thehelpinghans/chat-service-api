@@ -1,4 +1,4 @@
-package com.chatpay.saas.dto.chat;
+package com.chatpay.saas.dto.chat.chatmessage;
 
 import com.chatpay.saas.domain.MessageType;
 import jakarta.validation.constraints.NotBlank;
