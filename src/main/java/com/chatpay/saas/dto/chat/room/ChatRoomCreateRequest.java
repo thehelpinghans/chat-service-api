@@ -1,4 +1,4 @@
-package com.chatpay.saas.dto.chat.chatroom;
+package com.chatpay.saas.dto.chat.room;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

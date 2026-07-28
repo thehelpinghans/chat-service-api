@@ -1,9 +1,9 @@
-package com.chatpay.saas.controller;
+package com.chatpay.saas.controller.chat.message;
 
 import com.chatpay.saas.config.TenantFilter;
-import com.chatpay.saas.dto.chat.chatmessage.ChatMessageRequest;
-import com.chatpay.saas.dto.chat.chatmessage.ChatMessageResponse;
-import com.chatpay.saas.service.chat.ChatMessageService;
+import com.chatpay.saas.dto.chat.message.ChatMessageRequest;
+import com.chatpay.saas.dto.chat.message.ChatMessageResponse;
+import com.chatpay.saas.service.chat.message.ChatMessageService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +20,7 @@ import java.util.List;
  *       userId   → RequestAttribute(USER_ATTRIBUTE)로 이 컨트롤러에 전달.
  */
 @RestController
-@RequestMapping("/api/v1/chat-rooms")
+@RequestMapping("/api/v1/user/chat-rooms")
 @RequiredArgsConstructor
 public class ChatMessageController {
 
@@ -29,28 +29,27 @@ public class ChatMessageController {
     /**
      * 메시지 저장 + STOMP 브로드캐스트(ChatMessageService.sendMessage 내부에서 처리).
      *
-     * userId: TenantFilter → RequestAttributes → 여기서 수령
+     * userId: TenantFilter → RequestAttributes → 여기서 수령.
+     * required = false: 판매자용 userId=null Bearer 토큰(미구현, 공유 UI 경로)이 들어올 때
+     * Spring이 "attribute 없음"과 "값이 null"을 구분 못 해 required=true면 400을 내기 때문.
      */
     @PostMapping("/{chatRoomId}/messages")
     @Operation(summary = "채팅 메시지 전송")
     public ResponseEntity<ChatMessageResponse> sendMessage(
             @PathVariable Long chatRoomId,
             @RequestBody @Valid ChatMessageRequest request,
-            @RequestAttribute(TenantFilter.USER_ATTRIBUTE) Long userId) {
-        return ResponseEntity.ok(chatMessageService.sendMessage(chatRoomId, userId, request));
+            @RequestAttribute(value = TenantFilter.CHAT_ROOM_ATTRIBUTE, required = false) Long tokenChatRoomId,
+            @RequestAttribute(value = TenantFilter.USER_ATTRIBUTE, required = false) Long userId) {
+        return ResponseEntity.ok(chatMessageService.sendMessage(chatRoomId, tokenChatRoomId, userId, request));
     }
 
-    /**
-     * 커서 기반 페이지네이션으로 메시지 목록 조회.
-     * lastMessageId 없으면 최신 N개, 있으면 해당 id 이전 N개.
-     * tenantId는 TenantIdentifierResolver가 Hibernate 쿼리에 자동 적용.
-     */
     @GetMapping("/{chatRoomId}/messages")
     @Operation(summary = "채팅 메시지 목록 조회")
     public ResponseEntity<List<ChatMessageResponse>> getMessages(
             @PathVariable Long chatRoomId,
+            @RequestAttribute(value = TenantFilter.CHAT_ROOM_ATTRIBUTE, required = false) Long tokenChatRoomId,
             @RequestParam(required = false) Long lastMessageId,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(chatMessageService.findMessages(chatRoomId, lastMessageId, size));
+        return ResponseEntity.ok(chatMessageService.findMessages(chatRoomId, tokenChatRoomId, lastMessageId, size));
     }
 }

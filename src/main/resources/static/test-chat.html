@@ -6,17 +6,19 @@
     <style>
         body { font-family: monospace; max-width: 700px; margin: 40px auto; padding: 0 20px; }
         h2 { font-size: 16px; }
+        h3 { font-size: 13px; margin: 12px 0 6px; color: #333; }
         label { display: block; font-size: 12px; margin-bottom: 4px; color: #555; }
         input, textarea, select { width: 100%; box-sizing: border-box; padding: 6px; margin-bottom: 10px; font-family: monospace; font-size: 12px; }
         button { padding: 6px 16px; cursor: pointer; font-size: 12px; }
         #status { font-size: 12px; padding: 6px; margin-bottom: 10px; background: #f0f0f0; }
         #status.connected { background: #d4edda; color: #155724; }
         #status.disconnected { background: #f8d7da; color: #721c24; }
-        #log { border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 8px; font-size: 12px; background: #fafafa; }
+        #log, #history { border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 8px; font-size: 12px; background: #fafafa; }
         .log-recv { color: #155724; }
         .log-send { color: #004085; }
         .log-error { color: #721c24; }
         .log-info { color: #555; }
+        .scenario-box { border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }
         hr { border: none; border-top: 1px solid #eee; margin: 16px 0; }
     </style>
 </head>
@@ -28,23 +30,42 @@
 
 <hr>
 
-<h2>0. 채팅방 생성 (세션 토큰 받기)</h2>
-<label>API Key (X-Api-Key 헤더 — 개발용 더미: test-api-key-0000000000001)</label>
-<input id="apiKey" type="text" value="test-api-key-0000000000001">
-<label>externalUserId (구매자 외부 ID)</label>
-<input id="externalUserId" type="text" value="user-001">
-<label>externalItemId (상품 외부 ID)</label>
-<input id="externalItemId" type="text" value="item-001">
-<label>itemName (상품명)</label>
-<input id="itemName" type="text" value="테스트 상품">
-<label>itemPrice (상품 가격)</label>
-<input id="itemPrice" type="number" value="10000">
-<button onclick="createRoom()">채팅방 생성 + 토큰 받기</button>
+<h2>0. 채팅방 생성 (chatRoomId 발급 — 토큰 발급 API는 아직 미구현이라 아래 1번에 수동 입력 필요)</h2>
+
+<div class="scenario-box">
+    <h3>시나리오 A — 신규 유저/상품 (메시지 이력 0개, 지갑 없음)</h3>
+    <label>API Key (X-Api-Key 헤더)</label>
+    <input id="apiKey1" type="text" value="test-api-key-0000000000001">
+    <label>externalUserId</label>
+    <input id="externalUserId1" type="text" value="user-001">
+    <label>externalItemId</label>
+    <input id="externalItemId1" type="text" value="item-001">
+    <label>itemName</label>
+    <input id="itemName1" type="text" value="테스트 상품">
+    <label>itemPrice</label>
+    <input id="itemPrice1" type="number" value="10000">
+    <button onclick="createRoom('1')">시나리오 A로 채팅방 생성 + 토큰 받기</button>
+</div>
+
+<div class="scenario-box">
+    <h3>시나리오 B — 기존 유저/상품 (메시지 이력 50개, data.sql 시드 — 커서 페이지네이션 검증용)</h3>
+    <label>API Key (X-Api-Key 헤더)</label>
+    <input id="apiKey2" type="text" value="test-api-key-0000000000001">
+    <label>externalUserId</label>
+    <input id="externalUserId2" type="text" value="user-002">
+    <label>externalItemId</label>
+    <input id="externalItemId2" type="text" value="item-002">
+    <label>itemName</label>
+    <input id="itemName2" type="text" value="테스트 상품2">
+    <label>itemPrice</label>
+    <input id="itemPrice2" type="number" value="20000">
+    <button onclick="createRoom('2')">시나리오 B로 채팅방 생성 + 토큰 받기</button>
+</div>
 
 <hr>
 
 <h2>1. 연결</h2>
-<label>JWT 토큰 (채팅방 생성 API 응답의 sessionToken — 위에서 자동 입력됨)</label>
+<label>JWT 토큰 (토큰 발급 API 미구현 — 직접 발급받아 붙여넣어야 함)</label>
 <textarea id="token" rows="3" placeholder="eyJhbGci..."></textarea>
 <label>채팅방 ID</label>
 <input id="chatRoomId" type="number" value="">
@@ -65,30 +86,43 @@
 
 <hr>
 
-<h2>3. 수신 로그</h2>
+<h2>3. 수신 로그 (WebSocket 실시간)</h2>
 <button onclick="clearLog()">로그 지우기</button>
 <div id="log"></div>
+
+<hr>
+
+<h2>4. 메시지 이력 조회 (GET /messages — 커서 페이지네이션)</h2>
+<p style="font-size:12px;color:#555;">연결 시 최신 메시지를 자동 조회합니다. 목록을 아래로 스크롤해서 끝에 닿으면 자동으로 이전 페이지를 불러오며, 아래 버튼으로도 동일하게 불러올 수 있습니다.</p>
+<div id="history"></div>
+<button onclick="loadMoreHistory()">이전 메시지 더 보기</button>
+<div id="historyStatus" style="font-size:12px;color:#555;margin-top:4px;"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.js"></script>
 <script>
     let client = null;
+    let oldestLoadedId = null;
+    let isLoadingHistory = false;
+    let historyHasMore = true;
+    const HISTORY_PAGE_SIZE = 20;
 
-    async function createRoom() {
-        const apiKey = document.getElementById('apiKey').value.trim();
-        const externalUserId = document.getElementById('externalUserId').value.trim();
-        const externalItemId = document.getElementById('externalItemId').value.trim();
-        const itemName = document.getElementById('itemName').value.trim();
-        const itemPrice = document.getElementById('itemPrice').value.trim();
+    async function createRoom(suffix) {
+        const apiKey = document.getElementById('apiKey' + suffix).value.trim();
+        const externalUserId = document.getElementById('externalUserId' + suffix).value.trim();
+        const externalItemId = document.getElementById('externalItemId' + suffix).value.trim();
+        const itemName = document.getElementById('itemName' + suffix).value.trim();
+        const itemPrice = document.getElementById('itemPrice' + suffix).value.trim();
 
         if (!apiKey || !externalUserId || !externalItemId || !itemName || !itemPrice) {
             alert('모든 필드를 입력하세요.');
             return;
         }
 
-        log('POST /api/v1/chat-rooms 요청 중...', 'info');
+        const url = '/api/v1/tenant/chat-rooms/' + encodeURIComponent(externalUserId) + '/' + encodeURIComponent(externalItemId);
+        log('PUT ' + url + ' 요청 중... (시나리오 ' + suffix + ')', 'info');
         try {
-            const res = await fetch('/api/v1/chat-rooms', {
-                method: 'POST',
+            const res = await fetch(url, {
+                method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-Api-Key': apiKey
@@ -103,9 +137,8 @@
             }
 
             const data = await res.json();
-            document.getElementById('token').value = data.sessionToken;
             document.getElementById('chatRoomId').value = data.chatRoomId;
-            log('채팅방 생성 완료 — chatRoomId: ' + data.chatRoomId + ' / 토큰 자동 입력됨', 'info');
+            log('채팅방 생성 완료(' + res.status + ') — chatRoomId: ' + data.chatRoomId + '. 토큰 발급 API가 아직 없어 위 1번 칸에 토큰을 직접 입력해야 합니다.', 'info');
         } catch (e) {
             log('fetch 실패 (서버가 실행 중인지 확인): ' + e.message, 'error');
         }
@@ -132,6 +165,12 @@
 
         if (!token) { alert('토큰을 입력하세요.'); return; }
 
+        oldestLoadedId = null;
+        isLoadingHistory = false;
+        historyHasMore = true;
+        document.getElementById('history').innerHTML = '';
+        document.getElementById('historyStatus').textContent = '';
+
         client = new StompJs.Client({
             brokerURL: 'ws://localhost:8080/ws',
             connectHeaders: { Authorization: 'Bearer ' + token },
@@ -144,6 +183,9 @@
                     log('수신: ' + message.body, 'recv');
                 });
                 log('/topic/chat/' + chatRoomId + ' 구독 완료', 'info');
+
+                // 연결 성공 시 최신 메시지 자동 조회 (lastMessageId 없이 첫 페이지)
+                fetchMessages();
             },
             onDisconnect: () => {
                 setStatus('연결 해제됨', false);
@@ -177,7 +219,7 @@
 
         const body = JSON.stringify({ content, messageType });
         try {
-            const res = await fetch('/api/v1/chat-rooms/' + chatRoomId + '/messages', {
+            const res = await fetch('/api/v1/user/chat-rooms/' + chatRoomId + '/messages', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -197,6 +239,86 @@
         } catch (e) {
             log('전송 fetch 실패: ' + e.message, 'error');
         }
+    }
+
+    async function fetchMessages(lastMessageId) {
+        const token = document.getElementById('token').value.trim();
+        const chatRoomId = document.getElementById('chatRoomId').value;
+        if (!token || !chatRoomId) { alert('먼저 연결하세요.'); return; }
+
+        isLoadingHistory = true;
+        setHistoryStatus('불러오는 중...');
+
+        const params = new URLSearchParams({ size: String(HISTORY_PAGE_SIZE) });
+        if (lastMessageId) params.set('lastMessageId', lastMessageId);
+
+        log('GET /api/v1/user/chat-rooms/' + chatRoomId + '/messages?' + params + ' 요청 중...', 'info');
+        try {
+            const res = await fetch('/api/v1/user/chat-rooms/' + chatRoomId + '/messages?' + params, {
+                headers: { Authorization: 'Bearer ' + token }
+            });
+
+            if (!res.ok) {
+                const text = await res.text();
+                log('메시지 이력 조회 실패 ' + res.status + ': ' + text, 'error');
+                return;
+            }
+
+            const messages = await res.json();
+            renderHistory(messages, lastMessageId != null);
+
+            if (messages.length > 0) {
+                oldestLoadedId = messages[messages.length - 1].id;
+            }
+            if (messages.length < HISTORY_PAGE_SIZE) {
+                historyHasMore = false;
+            }
+            log('메시지 이력 ' + messages.length + '건 조회 완료', 'info');
+            setHistoryStatus(historyHasMore ? '' : '더 이상 이전 메시지가 없습니다.');
+        } catch (e) {
+            log('메시지 이력 조회 fetch 실패: ' + e.message, 'error');
+        } finally {
+            isLoadingHistory = false;
+        }
+    }
+
+    function setHistoryStatus(msg) {
+        document.getElementById('historyStatus').textContent = msg;
+    }
+
+    function loadMoreHistory() {
+        if (isLoadingHistory || !historyHasMore || oldestLoadedId == null) return;
+        fetchMessages(oldestLoadedId);
+    }
+
+    // 목록 바닥 근처까지 스크롤하면 이전(더 과거) 메시지 페이지를 자동으로 불러온다.
+    document.getElementById('history').addEventListener('scroll', (e) => {
+        const el = e.target;
+        const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+        if (nearBottom && !isLoadingHistory && historyHasMore && oldestLoadedId != null) {
+            fetchMessages(oldestLoadedId);
+        }
+    });
+
+    function renderHistory(messages, append) {
+        const div = document.getElementById('history');
+        if (!append) div.innerHTML = '';
+
+        if (messages.length === 0 && !append) {
+            const line = document.createElement('div');
+            line.className = 'log-info';
+            line.textContent = '(메시지 이력 없음)';
+            div.appendChild(line);
+            return;
+        }
+
+        messages.forEach((m) => {
+            const line = document.createElement('div');
+            line.className = m.userId == null ? 'log-info' : 'log-recv';
+            const who = m.userId == null ? '[테넌트 발신]' : '[user ' + m.userId + ']';
+            line.textContent = 'id=' + m.id + ' ' + who + ' (' + m.messageType + ') ' + m.content + ' — ' + m.createdAt;
+            div.appendChild(line);
+        });
     }
 
     function clearLog() {

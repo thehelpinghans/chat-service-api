@@ -11,6 +11,9 @@ import java.util.List;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Table(uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"tenant_id", "external_item_id"})
+})
 public class Item extends BaseEntity {
 
     @Id

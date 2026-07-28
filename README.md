@@ -10,7 +10,7 @@
 ユーザー（ブラウザ）はセッショントークンのみで WebSocket に接続し、`X-Api-Key` はブラウザに伝達されない。
 
 ```
-[パートナー企業 サーバー] ──X-Api-Key──▶ POST /api/v1/chat-rooms
+[パートナー企業 サーバー] ──X-Api-Key──▶ POST /api/v1/tenant/chat-rooms
                                   ↓ sessionToken(JWT) 返却
 [パートナー企業 フロント] ◀─── トークン ───[パートナー企業 サーバー]
            ↓
@@ -29,7 +29,6 @@
 | ORM | Spring Data JPA + QueryDSL 6.12 |
 | Realtime | Spring WebSocket (STOMP) |
 | DB (開発環境) | H2 in-memory (MySQL互換モード) |
-| API ドキュメント | springdoc-openapi 2.8.9 (`/swagger-ui.html`) |
 
 ---
 

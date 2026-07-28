@@ -1,4 +1,4 @@
-package com.chatpay.saas.service.chat;
+package com.chatpay.saas.service.user;
 
 import com.chatpay.saas.domain.User;
 import com.chatpay.saas.domain.Wallet;
@@ -27,5 +27,8 @@ public class UserService {
         User saved = userRepository.save(User.create(externalUserId));
         walletRepository.save(Wallet.create(userRepository.getReferenceById(saved.getId())));
         return saved;
+    }
+    public Optional<User> findUserById(String externalUserId) {
+        return userRepository.findByExternalId(externalUserId);
     }
 }

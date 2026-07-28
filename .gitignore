@@ -29,6 +29,7 @@ logs/
 
 # 시크릿 포함 설정 파일
 src/main/resources/application.yml
+src/main/resources/application-mysql.yml
 src/main/resources/application-prod.yml
 src/main/resources/data.sql
 

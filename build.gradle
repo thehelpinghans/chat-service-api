@@ -64,9 +64,8 @@ dependencies {
     // Spring Boot 3.5.x 호환: 2.8.x 이상 필요
     implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
 
-    // Database Driver (추후 MySQL 또는 PostgreSQL 선택 후 주석 해제)
-    // runtimeOnly 'com.mysql:mysql-connector-j'
-    // runtimeOnly 'org.postgresql:postgresql'
+    // MySQL(개발/테스트용/운영)
+    runtimeOnly 'com.mysql:mysql-connector-j'
 
     // H2 (개발/테스트용 인메모리 DB)
     runtimeOnly 'com.h2database:h2'

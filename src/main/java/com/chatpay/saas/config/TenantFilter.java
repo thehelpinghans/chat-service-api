@@ -38,6 +38,13 @@ import java.util.Optional;
  *   Bearer 헤더 → JWT claim에서 tenantId·userId를 함께 파싱 (DB 조회 없음)
  *   X-Api-Key   → 이 필터에서 DB 조회로 tenantId만 검증
  *   둘 다 없음  → 401 반환
+ *
+ * 경로별 허용 인증방식 강제: URL 네임스페이스 자체를 트러스트 레벨로 분리했다
+ * (/api/v1/user/** = Bearer 전용, 그 외 /api/v1/** = X-Api-Key 전용). BEARER_PATH_PREFIX
+ * 접두사 하나로 authenticateBearer/authenticateApiKey를 분기하므로, 예전처럼 특정 엔드포인트
+ * 모양(예: 숫자 chatRoomId, /tenant 접미사)을 정규식으로 하나하나 맞출 필요가 없고, 새 엔드포인트를
+ * 추가해도 올바른 네임스페이스 밑에만 두면 이 필터를 전혀 안 고쳐도 된다. 각 메서드가 반대쪽
+ * 헤더를 들여다보는 부분은 인증 판단이 아니라 에러 메시지를 정확히 주기 위한 부가 로직이다.
  */
 @Component
 @Order(1)
@@ -45,8 +52,15 @@ public class TenantFilter implements Filter {
 
     private static final String API_KEY_HEADER = "X-Api-Key";
 
+    // 구매자 브라우저(우리 SDK/iframe)만 호출하는 Bearer 전용 네임스페이스. 그 외 /api/v1/** 는 X-Api-Key 전용.
+    private static final String BEARER_PATH_PREFIX = "/api/v1/user/";
+
     // ChatMessageController 등에서 @RequestAttribute(USER_ATTRIBUTE)로 userId 수령 (Bearer 경로 전용)
     public static final String USER_ATTRIBUTE = "CURRENT_USER_ID";
+
+    // ChatMessageController 등에서 @RequestAttribute(CHAT_ROOM_ATTRIBUTE)로 토큰의 chatRoomId claim 수령
+    // (BOLA 방지 — 경로변수 chatRoomId와 비교하는 데 씀, docs/embed-widget-security-design.md 참고)
+    public static final String CHAT_ROOM_ATTRIBUTE = "CURRENT_CHAT_ROOM_ID";
 
     private final TenantRepository tenantRepository;
     private final JwtProvider jwtProvider;
@@ -63,49 +77,78 @@ public class TenantFilter implements Filter {
         HttpServletResponse httpResponse = (HttpServletResponse) response;
 
         // 개발용 경로 bypass: H2 Console, Swagger UI, OpenAPI 스펙, WebSocket
-        if (httpRequest.getRequestURI().matches("^/(h2-console|swagger-ui.*|v3/api-docs|test-chat\\.html|ws.*).*")) {
+        if (httpRequest.getRequestURI().matches("^/(h2-console|swagger-ui.*|v3/api-docs|.*\\.html|ws.*).*")) {
             chain.doFilter(request, response);
             return;
         }
 
-        // Bearer 토큰이 있으면 JWT 인증 경로(구매자 브라우저)
-        // 한 번의 파싱·서명 검증으로 tenantId·userId를 모두 추출 — 별도 필터로 나눠
-        // 같은 토큰을 또 검증하면 중복 연산 + 필터 간 순서 의존이 생기므로 여기서 함께 처리
-        String authHeader = httpRequest.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            try {
-                Claims claims = jwtProvider.getClaims(authHeader.substring(7));
-                Long tenantId = claims.get("tenantId", Long.class);
-                Long userId = claims.get("userId", Long.class);
-                RequestAttributes attrs = RequestContextHolder.currentRequestAttributes();
-                attrs.setAttribute(TenantIdentifierResolver.TENANT_ATTRIBUTE, tenantId, RequestAttributes.SCOPE_REQUEST);
-                attrs.setAttribute(USER_ATTRIBUTE, userId, RequestAttributes.SCOPE_REQUEST);
-            } catch (JwtException e) {
-                httpResponse.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid JWT token");
-                return;
+        if (httpRequest.getRequestURI().startsWith(BEARER_PATH_PREFIX)) {
+            authenticateBearer(httpRequest, httpResponse, chain);
+        } else {
+            authenticateApiKey(httpRequest, httpResponse, chain);
+        }
+    }
+
+    // 구매자 브라우저(우리 SDK/iframe) 전용 — 한 번의 파싱·서명 검증으로 tenantId·userId를 함께 추출(DB 조회 없음)
+    private void authenticateBearer(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        String authHeader = request.getHeader("Authorization"); // 이 메서드 호출 시(=Bearer 전용 경로) 항상 실행
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            boolean sentApiKeyInstead = request.getHeader(API_KEY_HEADER) != null;
+            if (sentApiKeyInstead) {
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, "이 API는 Bearer 토큰이 필요합니다. X-Api-Key로는 접근할 수 없습니다.");
+            } else {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "인증 정보가 없습니다. Bearer 토큰을 포함해주세요.");
             }
-            chain.doFilter(request, response);
             return;
         }
 
-        String apiKey = httpRequest.getHeader(API_KEY_HEADER);
+        try {
+            Claims claims = jwtProvider.getClaims(authHeader.substring(7)); // Bearer 헤더 형식이 맞을 때만 실행 — 서명 검증 시도
+            Long tenantId = claims.get("tenantId", Long.class);
+            Long userId = claims.get("userId", Long.class);
+            Long chatRoomId = claims.get("chatRoomId", Long.class);
+            RequestAttributes attrs = RequestContextHolder.currentRequestAttributes();
+            attrs.setAttribute(TenantIdentifierResolver.TENANT_ATTRIBUTE, tenantId, RequestAttributes.SCOPE_REQUEST);
+            attrs.setAttribute(USER_ATTRIBUTE, userId, RequestAttributes.SCOPE_REQUEST);
+            attrs.setAttribute(CHAT_ROOM_ATTRIBUTE, chatRoomId, RequestAttributes.SCOPE_REQUEST);
+        } catch (JwtException e) {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "유효하지 않은 토큰입니다.");
+            return;
+        }
+
+        chain.doFilter(request, response);
+    }
+
+    // 테넌트 서버(서버-투-서버) 전용 — DB 조회로 tenantId만 검증
+    private void authenticateApiKey(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        String apiKey = request.getHeader(API_KEY_HEADER); // 이 메서드 호출 시(=X-Api-Key 전용 경로) 항상 실행
 
         if (apiKey == null || apiKey.isBlank()) {
-            httpResponse.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Missing X-Api-Key header");
+            // X-Api-Key 헤더가 없거나 빈 값일 때만 true
+            String authHeader = request.getHeader("Authorization");
+            boolean sentBearerInstead = authHeader != null && authHeader.startsWith("Bearer ");
+            if (sentBearerInstead) {
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, "이 API는 X-Api-Key가 필요합니다. Bearer 토큰으로는 접근할 수 없습니다.");
+            } else {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "인증 정보가 없습니다. X-Api-Key 헤더를 포함해주세요.");
+            }
             return;
         }
 
         Optional<Tenant> tenantOpt = tenantRepository.findByApiKey(apiKey);
 
         if (tenantOpt.isEmpty()) {
-            httpResponse.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid API key");
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "유효하지 않은 API 키입니다.");
             return;
         }
 
         Tenant tenant = tenantOpt.get();
 
         if (tenant.getStatus() != TenantStatus.ACTIVE) {
-            httpResponse.sendError(HttpServletResponse.SC_FORBIDDEN, "Tenant is not active");
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "비활성화된 테넌트입니다.");
             return;
         }
 

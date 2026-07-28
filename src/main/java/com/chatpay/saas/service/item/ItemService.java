@@ -1,4 +1,4 @@
-package com.chatpay.saas.service.chat;
+package com.chatpay.saas.service.item;
 
 import com.chatpay.saas.domain.Item;
 import com.chatpay.saas.repository.ItemRepository;

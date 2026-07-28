@@ -1,4 +1,4 @@
-package com.chatpay.saas.dto.chat.chatmessage;
+package com.chatpay.saas.dto.chat.message;
 
 import com.chatpay.saas.domain.MessageType;
 import jakarta.validation.constraints.NotBlank;
@@ -15,7 +15,4 @@ public record ChatMessageRequest(
         @NotNull
         MessageType messageType
 
-        // chatRoomId, userId, tenantId는 클라이언트에서 받지 않음
-        // → chatRoomId: @DestinationVariable로 URL에서 추출 (/app/chat/{chatRoomId})
-        // → userId, tenantId: WebSocket 세션에서 추출 (CONNECT 시 JWT로 저장한 값)
 ) {}

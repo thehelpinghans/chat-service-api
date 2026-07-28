@@ -1,4 +1,4 @@
-package com.chatpay.saas.dto.chat.chatmessage;
+package com.chatpay.saas.dto.chat.message;
 
 import com.chatpay.saas.domain.MessageType;
 

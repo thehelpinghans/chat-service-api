@@ -1,10 +1,12 @@
-package com.chatpay.saas.service.chat;
+package com.chatpay.saas.service.chat.room;
 
 import com.chatpay.saas.domain.*;
-import com.chatpay.saas.dto.chat.chatroom.ChatRoomCreateRequest;
-import com.chatpay.saas.dto.chat.chatroom.ChatRoomResponse;
-import com.chatpay.saas.dto.chat.chatroom.ChatRoomUpsertResult;
+import com.chatpay.saas.dto.chat.room.ChatRoomCreateRequest;
+import com.chatpay.saas.dto.chat.room.ChatRoomResponse;
+import com.chatpay.saas.dto.chat.room.ChatRoomUpsertResult;
 import com.chatpay.saas.repository.*;
+import com.chatpay.saas.service.item.ItemService;
+import com.chatpay.saas.service.user.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,10 @@ public class ChatRoomService {
 
     public Optional<ChatRoom> findChatRoom(String externalUserId, String externalItemId) {
         return chatRoomRepository.findByUserExternalIdAndItemExternalItemId(externalUserId, externalItemId);
+    }
+
+    public Optional<ChatRoom> findChatRoomById(Long chatRoomId) {
+        return chatRoomRepository.findById(chatRoomId);
     }
 
     @Transactional
