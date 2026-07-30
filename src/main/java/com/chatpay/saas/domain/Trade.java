@@ -47,4 +47,15 @@ public class Trade extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "item_id", nullable = false)
     private Item item;
+
+    public static Trade create(User user, Item item, String itemName, Long amount, ChatMessage chatMessage) {
+        Trade trade = new Trade();
+        trade.user = user;
+        trade.item = item;
+        trade.itemName = itemName;
+        trade.amount = amount;
+        trade.tradeStatus = TradeStatus.PENDING;
+        trade.chatMessage = chatMessage;
+        return trade;
+    }
 }

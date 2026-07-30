@@ -1,9 +1,6 @@
 package com.chatpay.saas.service.chat.message;
 
-import com.chatpay.saas.domain.ChatMessage;
-import com.chatpay.saas.domain.ChatRoom;
-import com.chatpay.saas.domain.User;
-import com.chatpay.saas.domain.UserStatus;
+import com.chatpay.saas.domain.*;
 import com.chatpay.saas.dto.chat.message.ChatMessageRequest;
 import com.chatpay.saas.dto.chat.message.ChatMessageResponse;
 import com.chatpay.saas.repository.*;
@@ -27,9 +24,8 @@ public class ChatMessageService {
     private final ChatMessageRepository chatMessageRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
-    // 저장 + STOMP 브로드캐스트를 한 단위로 묶은 진입점.
-    // TODO: tokenChatRoomId 체크는 Bearer(구매자) 세션 전제 — X-Api-Key raw API(TenantChatMessageController)를
-    //   실제로 연결할 때는 tokenChatRoomId가 항상 null이라 이 체크에 걸려 항상 403이 남. 그때 분리 필요.
+    // 저장 + STOMP 브로드캐스트를 한 단위로 묶은 진입점. Bearer(구매자/판매자) 세션 전용 —
+    // 테넌트 백오피스의 결제 요청 생성(X-Api-Key)은 별도 TradeService에서 처리(controller.trade.TradeController).
     @Transactional
     public ChatMessageResponse sendMessage(Long chatRoomId, Long tokenChatRoomId, Long userId, ChatMessageRequest request) {
 
@@ -57,7 +53,7 @@ public class ChatMessageService {
         }
 
         ChatMessage saved = chatMessageRepository.save(
-                ChatMessage.create(chatRoom, user, request.content(), request.messageType()));
+                ChatMessage.create(chatRoom, user, request.content(), MessageType.TEXT));
 
         return new ChatMessageResponse(
                 saved.getId(), saved.getMessageType(), saved.getContent(),
@@ -90,4 +86,7 @@ public class ChatMessageService {
                 .toList();
     }
 
+    public ChatMessage createPaymentRequestMessage(ChatRoom chatRoom) {
+        return chatMessageRepository.save(ChatMessage.create(chatRoom, null, "결제 요청 드립니다", MessageType.PAYMENT_REQUEST));
+    }
 }
