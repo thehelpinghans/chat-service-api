@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -88,5 +89,10 @@ public class ChatMessageService {
 
     public ChatMessage createPaymentRequestMessage(ChatRoom chatRoom) {
         return chatMessageRepository.save(ChatMessage.create(chatRoom, null, "결제 요청 드립니다", MessageType.PAYMENT_REQUEST));
+    }
+
+    // TradeService.payTrade가 chatMessageId 기준으로 결제 대상을 조회할 때 위임하는 진입점(ChatRoomService.findChatRoomById와 동일 패턴)
+    public Optional<ChatMessage> findChatMessageById(Long chatMessageId) {
+        return chatMessageRepository.findById(chatMessageId);
     }
 }

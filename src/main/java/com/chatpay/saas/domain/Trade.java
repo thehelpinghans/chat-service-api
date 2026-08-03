@@ -58,4 +58,8 @@ public class Trade extends BaseEntity {
         trade.chatMessage = chatMessage;
         return trade;
     }
+
+    public void changeStatus(TradeStatus tradeStatus) {
+        this.tradeStatus = tradeStatus;
+    }
 }

@@ -38,4 +38,8 @@ public class Wallet extends BaseEntity {
         wallet.balance = 0L;
         return wallet;
     }
+
+    public void pay(long amount) {
+        this.balance -= amount;
+    }
 }
