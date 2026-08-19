@@ -1,5 +1,0 @@
-package com.chatpay.saas.dto.chat.room;
-
-public record ChatRoomResponse(
-        Long chatRoomId
-) {}
