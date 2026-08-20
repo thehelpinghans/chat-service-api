@@ -4,33 +4,40 @@
     <meta charset="UTF-8">
     <title>WebSocket 채팅 테스트</title>
     <style>
-        body { font-family: monospace; max-width: 700px; margin: 40px auto; padding: 0 20px; }
+        body { font-family: monospace; max-width: 1000px; margin: 40px auto; padding: 0 20px; }
         h2 { font-size: 16px; }
         h3 { font-size: 13px; margin: 12px 0 6px; color: #333; }
         label { display: block; font-size: 12px; margin-bottom: 4px; color: #555; }
         input, textarea, select { width: 100%; box-sizing: border-box; padding: 6px; margin-bottom: 10px; font-family: monospace; font-size: 12px; }
         button { padding: 6px 16px; cursor: pointer; font-size: 12px; }
-        #status { font-size: 12px; padding: 6px; margin-bottom: 10px; background: #f0f0f0; }
-        #status.connected { background: #d4edda; color: #155724; }
-        #status.disconnected { background: #f8d7da; color: #721c24; }
-        #log, #history { border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 8px; font-size: 12px; background: #fafafa; }
+        .conn-status { font-size: 12px; padding: 6px; margin-bottom: 10px; background: #f0f0f0; }
+        .conn-status.connected { background: #d4edda; color: #155724; }
+        .conn-status.disconnected { background: #f8d7da; color: #721c24; }
+        #log, .history-pane { border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 8px; font-size: 12px; background: #fafafa; }
         .log-recv { color: #155724; }
         .log-send { color: #004085; }
         .log-error { color: #721c24; }
         .log-info { color: #555; }
         .scenario-box { border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }
         hr { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+        .chat-bubble { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; }
+        .chat-bubble .pay-button { flex-shrink: 0; }
+        .compose-row { display: flex; gap: 8px; }
+        .compose-row input { width: auto; flex: 1; margin-bottom: 0; }
+        .chat-columns { display: flex; gap: 16px; }
+        .chat-column { flex: 1; min-width: 0; border: 1px solid #ddd; padding: 10px; }
+        .chat-column h3 { margin-top: 0; }
     </style>
 </head>
 <body>
 
 <h2>WebSocket 채팅 테스트</h2>
 
-<div id="status" class="disconnected">연결 안됨</div>
+<button onclick="resetAll()">초기화 (API Key만 바꿔서 재시작)</button>
 
 <hr>
 
-<h2>0. 채팅방 생성 (chatRoomId 발급 — 토큰 발급 API는 아직 미구현이라 아래 1번에 수동 입력 필요)</h2>
+<h2>0. 채팅방 생성 (chatRoomId 발급 + 구매자/판매자 세션 토큰 자동 발급)</h2>
 
 <div class="scenario-box">
     <h3>시나리오 A — 신규 유저/상품 (메시지 이력 0개, 지갑 없음)</h3>
@@ -62,27 +69,58 @@
     <button onclick="createRoom('2')">시나리오 B로 채팅방 생성 + 토큰 받기</button>
 </div>
 
-<hr>
-
-<h2>1. 연결</h2>
-<label>JWT 토큰 (토큰 발급 API 미구현 — 직접 발급받아 붙여넣어야 함)</label>
-<textarea id="token" rows="3" placeholder="eyJhbGci..."></textarea>
-<label>채팅방 ID</label>
-<input id="chatRoomId" type="number" value="">
-<button onclick="connect()">연결</button>
-<button onclick="disconnect()">연결 해제</button>
+<!-- 구매자/판매자 세션 토큰(JWT) — 인코딩된 값이라 사람이 볼 필요 없어서 화면엔 안 띄우고 내부 상태로만 보관 -->
+<input id="token" type="hidden">
+<input id="sellerToken" type="hidden">
 
 <hr>
 
-<h2>2. 메시지 전송</h2>
-<label>내용</label>
-<input id="content" type="text" placeholder="메시지 입력">
-<label>타입</label>
-<select id="messageType">
-    <option value="TEXT">TEXT</option>
-    <option value="PAYMENT_REQUEST">PAYMENT_REQUEST</option>
-</select>
-<button onclick="sendMessage()">전송</button>
+<h2>1. 연결 관리</h2>
+<p style="font-size:12px;color:#555;">테넌트/구매자가 완전히 독립된 WS 연결(각자 다른 토큰으로 별도 STOMP CONNECT) — 0번 완료 시 둘 다 자동으로 붙고, 채팅방이 여러 개 있을 수 있어 다른 방으로 전환하고 싶을 때 수동으로 다시 누를 수 있게 버튼은 남겨둠.</p>
+<label>현재 chatRoomId (읽기 전용)</label>
+<input id="chatRoomId" type="number" value="" readonly>
+
+<div class="chat-columns">
+    <div class="chat-column">
+        <div id="statusTenant" class="conn-status disconnected">테넌트: 연결 안됨</div>
+        <button onclick="connectTenant()">테넌트 연결</button>
+        <button onclick="disconnectTenant()">연결 해제</button>
+    </div>
+    <div class="chat-column">
+        <div id="statusUser" class="conn-status disconnected">구매자: 연결 안됨</div>
+        <button onclick="connectUser()">구매자 연결</button>
+        <button onclick="disconnectUser()">연결 해제</button>
+    </div>
+</div>
+
+<hr>
+
+<h2>2. 채팅방 (테넌트 / 구매자 화면 분리)</h2>
+<p style="font-size:12px;color:#555;">같은 채팅방을 양쪽 화면에서 동시에 봄 — 왼쪽은 판매자(테넌트), 오른쪽은 구매자. 연결 시 최신 메시지를 자동 조회하고, PAYMENT_REQUEST 메시지의 결제 버튼은 구매자 쪽에만 표시됩니다.</p>
+
+<div class="chat-columns">
+    <div class="chat-column">
+        <h3>테넌트(판매자) 화면</h3>
+        <div id="historyTenant" class="history-pane"></div>
+        <div class="compose-row" style="margin-top:8px;">
+            <input id="tenantContent" type="text" placeholder="메시지 입력 (TEXT만 생성됨)">
+            <button onclick="sendTenantMessage()">발신</button>
+        </div>
+        <button onclick="createTrade()" style="margin-top:6px;">결제 요청 생성</button>
+    </div>
+    <div class="chat-column">
+        <h3>구매자 화면</h3>
+        <div id="historyUser" class="history-pane"></div>
+        <div class="compose-row" style="margin-top:8px;">
+            <input id="content" type="text" placeholder="메시지 입력 (TEXT만 생성됨)">
+            <button onclick="sendMessage()">전송</button>
+        </div>
+    </div>
+</div>
+
+<button onclick="loadMoreHistory()" style="margin-top:10px;">이전 메시지 더 보기</button>
+<button onclick="clearHistory()">채팅 지우기</button>
+<div id="historyStatus" style="font-size:12px;color:#555;margin:4px 0 10px;"></div>
 
 <hr>
 
@@ -90,21 +128,19 @@
 <button onclick="clearLog()">로그 지우기</button>
 <div id="log"></div>
 
-<hr>
-
-<h2>4. 메시지 이력 조회 (GET /messages — 커서 페이지네이션)</h2>
-<p style="font-size:12px;color:#555;">연결 시 최신 메시지를 자동 조회합니다. 목록을 아래로 스크롤해서 끝에 닿으면 자동으로 이전 페이지를 불러오며, 아래 버튼으로도 동일하게 불러올 수 있습니다.</p>
-<div id="history"></div>
-<button onclick="loadMoreHistory()">이전 메시지 더 보기</button>
-<div id="historyStatus" style="font-size:12px;color:#555;margin-top:4px;"></div>
-
 <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.js"></script>
 <script>
-    let client = null;
+    let tenantClient = null;
+    let userClient = null;
     let oldestLoadedId = null;
     let isLoadingHistory = false;
     let historyHasMore = true;
     const HISTORY_PAGE_SIZE = 20;
+    const HISTORY_PANE_IDS = ['historyTenant', 'historyUser'];
+
+    function clearHistoryPanes() {
+        HISTORY_PANE_IDS.forEach((paneId) => { document.getElementById(paneId).innerHTML = ''; });
+    }
 
     async function createRoom(suffix) {
         const apiKey = document.getElementById('apiKey' + suffix).value.trim();
@@ -137,10 +173,54 @@
             }
 
             const data = await res.json();
-            document.getElementById('chatRoomId').value = data.chatRoomId;
-            log('채팅방 생성 완료(' + res.status + ') — chatRoomId: ' + data.chatRoomId + '. 토큰 발급 API가 아직 없어 위 1번 칸에 토큰을 직접 입력해야 합니다.', 'info');
+            const chatRoomId = data.chatRoomId;
+            document.getElementById('chatRoomId').value = chatRoomId;
+            log('채팅방 생성 완료(' + res.status + ') — chatRoomId: ' + chatRoomId, 'info');
+
+            await issueTokens(chatRoomId, apiKey, externalUserId);
+            connectTenant();
+            connectUser();
         } catch (e) {
             log('fetch 실패 (서버가 실행 중인지 확인): ' + e.message, 'error');
+        }
+    }
+
+    // 채팅방 생성 직후 구매자/판매자 세션 토큰을 각각 발급받아 0-1번 칸에 자동으로 채워넣는다.
+    // (RFC 6750/axios interceptor와 마찬가지로 "자동 삽입"은 클라이언트 코드가 명시적으로 연결해줘야 하는 부분)
+    async function issueTokens(chatRoomId, apiKey, externalUserId) {
+        try {
+            const res = await fetch('/api/v1/tenant/chat-rooms/' + chatRoomId + '/tokens', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
+                body: JSON.stringify({ externalUserId })
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                log('구매자 토큰 발급 실패 ' + res.status + ': ' + text, 'error');
+            } else {
+                const data = await res.json();
+                document.getElementById('token').value = data.response.token;
+                log('구매자 토큰 발급 완료', 'info');
+            }
+        } catch (e) {
+            log('구매자 토큰 발급 fetch 실패: ' + e.message, 'error');
+        }
+
+        try {
+            const res = await fetch('/api/v1/tenant/chat-rooms/' + chatRoomId + '/tenant-tokens', {
+                method: 'POST',
+                headers: { 'X-Api-Key': apiKey }
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                log('판매자 토큰 발급 실패 ' + res.status + ': ' + text, 'error');
+            } else {
+                const data = await res.json();
+                document.getElementById('sellerToken').value = data.response.token;
+                log('판매자 토큰 발급 완료', 'info');
+            }
+        } catch (e) {
+            log('판매자 토큰 발급 fetch 실패: ' + e.message, 'error');
         }
     }
 
@@ -153,71 +233,105 @@
         div.scrollTop = div.scrollHeight;
     }
 
-    function setStatus(msg, connected) {
-        const el = document.getElementById('status');
+    function setStatus(elementId, msg, connected) {
+        const el = document.getElementById(elementId);
         el.textContent = msg;
-        el.className = connected ? 'connected' : 'disconnected';
+        el.className = 'conn-status ' + (connected ? 'connected' : 'disconnected');
     }
 
-    function connect() {
-        const token = document.getElementById('token').value.trim();
-        const chatRoomId = document.getElementById('chatRoomId').value;
-
-        if (!token) { alert('토큰을 입력하세요.'); return; }
-
-        oldestLoadedId = null;
-        isLoadingHistory = false;
-        historyHasMore = true;
-        document.getElementById('history').innerHTML = '';
-        document.getElementById('historyStatus').textContent = '';
-
-        client = new StompJs.Client({
+    // 테넌트/구매자 각자 다른 토큰으로 별도 STOMP CONNECT를 맺는 완전히 독립된 연결 — 같은 토픽을 각자 구독하므로
+    // 브로드캐스트 1건이 두 연결 모두에 개별 전달된다. WebSocketConfig의 ChannelInterceptor는 CONNECT 시
+    // JWT 서명만 검증하고 연결 수·세션 상태 제약이 없어 이 구조가 가능함(2026-08-21 확인).
+    function createChatConnection(token, chatRoomId, paneId, statusId, label) {
+        const connection = new StompJs.Client({
             brokerURL: 'ws://localhost:8080/ws',
             connectHeaders: { Authorization: 'Bearer ' + token },
             onConnect: () => {
-                setStatus('연결됨 (chatRoomId: ' + chatRoomId + ')', true);
-                log('CONNECT 성공', 'info');
+                setStatus(statusId, label + ': 연결됨 (chatRoomId: ' + chatRoomId + ')', true);
+                log('[' + label + '] CONNECT 성공', 'info');
 
-                // 채팅방 구독
-                client.subscribe('/topic/chat/' + chatRoomId, (message) => {
-                    log('수신: ' + message.body, 'recv');
+                connection.subscribe('/topic/chat/' + chatRoomId, (message) => {
+                    handleBroadcastPayload(paneId, label, message.body);
                 });
-                log('/topic/chat/' + chatRoomId + ' 구독 완료', 'info');
+                log('[' + label + '] /topic/chat/' + chatRoomId + ' 구독 완료', 'info');
 
-                // 연결 성공 시 최신 메시지 자동 조회 (lastMessageId 없이 첫 페이지)
+                // 연결 성공 시 최신 메시지 자동 조회(공유 REST 호출, 양쪽 화면에 반영) — 두 연결이 각자 호출해도
+                // renderHistory가 매번 전체를 새로 그리는 방식이라 중복 누적 없이 안전함
                 fetchMessages();
             },
             onDisconnect: () => {
-                setStatus('연결 해제됨', false);
-                log('DISCONNECT', 'info');
+                setStatus(statusId, label + ': 연결 해제됨', false);
+                log('[' + label + '] DISCONNECT', 'info');
             },
             onStompError: (frame) => {
-                setStatus('에러: ' + frame.headers['message'], false);
-                log('STOMP 에러: ' + JSON.stringify(frame.headers), 'error');
+                setStatus(statusId, label + ' 에러: ' + frame.headers['message'], false);
+                log('[' + label + '] STOMP 에러: ' + JSON.stringify(frame.headers), 'error');
             },
-            onWebSocketError: (event) => {
-                setStatus('WebSocket 에러', false);
-                log('WebSocket 에러 (서버가 실행 중인지 확인)', 'error');
+            onWebSocketError: () => {
+                setStatus(statusId, label + ': WebSocket 에러', false);
+                log('[' + label + '] WebSocket 에러 (서버가 실행 중인지 확인)', 'error');
             }
         });
-
-        client.activate();
+        return connection;
     }
 
-    function disconnect() {
-        if (client) { client.deactivate(); client = null; }
+    // oldestLoadedId/historyHasMore는 두 pane이 공유하는 페이지네이션 상태라, 어느 쪽이든 (재)연결할 때
+    // 리셋 안 하면 이전 방에서 historyHasMore=false로 굳어있던 값이 새 방에 그대로 남아 "이전 메시지 더 보기"가
+    // 막힌 채로 고정되는 버그가 있었음 — 연결 시점마다 초기화해서 새 fetchMessages() 결과로 다시 판단하게 함.
+    function resetHistoryPaginationState() {
+        oldestLoadedId = null;
+        isLoadingHistory = false;
+        historyHasMore = true;
     }
 
-    async function sendMessage() {
+    function connectTenant() {
+        const token = document.getElementById('sellerToken').value.trim();
+        const chatRoomId = document.getElementById('chatRoomId').value;
+
+        if (!token) { alert('판매자 세션 토큰이 없습니다. 먼저 0번에서 채팅방을 생성하세요.'); return; }
+        if (!chatRoomId) { alert('채팅방 ID가 없습니다.'); return; }
+
+        if (tenantClient) { tenantClient.deactivate(); tenantClient = null; }
+        document.getElementById('historyTenant').innerHTML = '';
+        resetHistoryPaginationState();
+
+        tenantClient = createChatConnection(token, chatRoomId, 'historyTenant', 'statusTenant', '테넌트');
+        tenantClient.activate();
+    }
+
+    function connectUser() {
         const token = document.getElementById('token').value.trim();
         const chatRoomId = document.getElementById('chatRoomId').value;
-        const content = document.getElementById('content').value.trim();
-        const messageType = document.getElementById('messageType').value;
 
-        if (!token) { alert('토큰을 입력하세요.'); return; }
-        if (!content) { alert('내용을 입력하세요.'); return; }
+        if (!token) { alert('구매자 세션 토큰이 없습니다. 먼저 0번에서 채팅방을 생성하세요.'); return; }
+        if (!chatRoomId) { alert('채팅방 ID가 없습니다.'); return; }
 
-        const body = JSON.stringify({ content, messageType });
+        if (userClient) { userClient.deactivate(); userClient = null; }
+        document.getElementById('historyUser').innerHTML = '';
+        resetHistoryPaginationState();
+
+        userClient = createChatConnection(token, chatRoomId, 'historyUser', 'statusUser', '구매자');
+        userClient.activate();
+    }
+
+    function disconnectTenant() {
+        if (tenantClient) { tenantClient.deactivate(); tenantClient = null; }
+    }
+
+    function disconnectUser() {
+        if (userClient) { userClient.deactivate(); userClient = null; }
+    }
+
+    // userId가 있으면(구매자 토큰) 그 값, 없으면(판매자/테넌트 토큰) "테넌트 발신"으로 표기 —
+    // ChatMessage.user_id nullable=테넌트 발신이라는 도메인 규칙을 로그에서도 그대로 드러냄
+    function describeUserId(userId) {
+        return userId == null ? 'userId 없음(테넌트 발신)' : 'userId=' + userId;
+    }
+
+    // 구매자 발신(sendMessage)/테넌트 발신(sendTenantMessage) 둘 다 같은 /messages API를 토큰만 바꿔서 호출한다.
+    async function postChatMessage(token, content, senderLabel) {
+        const chatRoomId = document.getElementById('chatRoomId').value;
+        const body = JSON.stringify({ content });
         try {
             const res = await fetch('/api/v1/user/chat-rooms/' + chatRoomId + '/messages', {
                 method: 'POST',
@@ -230,15 +344,37 @@
 
             if (!res.ok) {
                 const text = await res.text();
-                log('전송 실패 ' + res.status + ': ' + text, 'error');
+                log(senderLabel + ' 발신 실패 ' + res.status + ': ' + text, 'error');
                 return;
             }
 
-            log('전송: ' + body, 'send');
-            document.getElementById('content').value = '';
+            const data = await res.json();
+            log('발신(' + senderLabel + ', ' + describeUserId(data.message.userId) + '): ' + content, 'send');
         } catch (e) {
-            log('전송 fetch 실패: ' + e.message, 'error');
+            log(senderLabel + ' 발신 fetch 실패: ' + e.message, 'error');
         }
+    }
+
+    async function sendMessage() {
+        const token = document.getElementById('token').value.trim();
+        const content = document.getElementById('content').value.trim();
+
+        if (!token) { alert('토큰이 없습니다.'); return; }
+        if (!content) { alert('내용을 입력하세요.'); return; }
+
+        await postChatMessage(token, content, '구매자');
+        document.getElementById('content').value = '';
+    }
+
+    async function sendTenantMessage() {
+        const sellerToken = document.getElementById('sellerToken').value.trim();
+        const content = document.getElementById('tenantContent').value.trim();
+
+        if (!sellerToken) { alert('판매자 세션 토큰이 없습니다.'); return; }
+        if (!content) { alert('내용을 입력하세요.'); return; }
+
+        await postChatMessage(sellerToken, content, '테넌트');
+        document.getElementById('tenantContent').value = '';
     }
 
     async function fetchMessages(lastMessageId) {
@@ -264,7 +400,8 @@
                 return;
             }
 
-            const messages = await res.json();
+            const data = await res.json();
+            const messages = data.messageList;
             renderHistory(messages, lastMessageId != null);
 
             if (messages.length > 0) {
@@ -291,43 +428,213 @@
         fetchMessages(oldestLoadedId);
     }
 
-    // 목록 바닥 근처까지 스크롤하면 이전(더 과거) 메시지 페이지를 자동으로 불러온다.
-    document.getElementById('history').addEventListener('scroll', (e) => {
-        const el = e.target;
-        const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
-        if (nearBottom && !isLoadingHistory && historyHasMore && oldestLoadedId != null) {
-            fetchMessages(oldestLoadedId);
-        }
+    // 목록 바닥 근처까지 스크롤하면 이전(더 과거) 메시지 페이지를 자동으로 불러온다. 두 화면(테넌트/구매자) 중
+    // 어느 쪽을 스크롤해도 같은 공유 페이지네이션 상태(oldestLoadedId 등)로 한 번만 조회하면 양쪽 다 갱신됨.
+    HISTORY_PANE_IDS.forEach((paneId) => {
+        document.getElementById(paneId).addEventListener('scroll', (e) => {
+            const el = e.target;
+            const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+            if (nearBottom && !isLoadingHistory && historyHasMore && oldestLoadedId != null) {
+                fetchMessages(oldestLoadedId);
+            }
+        });
     });
 
-    function renderHistory(messages, append) {
-        const div = document.getElementById('history');
-        if (!append) div.innerHTML = '';
+    // PAYMENT_REQUEST 메시지는 말풍선 안에 결제 버튼을 함께 렌더링한다(실사용 room.html과 동일한 배치 —
+    // 결제 요청/실행 API는 별개 엔드포인트지만, 버튼은 그 요청을 만든 메시지에 붙어 있어야 함).
+    // 구매자는 본인이 결제해야 하니 버튼을 보여주고, 판매자 화면엔 안 보여준다(눌러도 PaymentOwnerMismatch로 막히긴 함).
+    // fetchMessages(과거 이력)와 실시간 WS 수신(appendLiveMessage) 둘 다 이 빌더를 공유한다.
+    function buildMessageBubble(m, showPayButton) {
+        const line = document.createElement('div');
+        line.className = 'chat-bubble ' + (m.userId == null ? 'log-info' : 'log-recv');
 
-        if (messages.length === 0 && !append) {
-            const line = document.createElement('div');
-            line.className = 'log-info';
-            line.textContent = '(메시지 이력 없음)';
-            div.appendChild(line);
+        const who = m.userId == null ? '[테넌트 발신]' : '[user ' + m.userId + ']';
+        const textPart = document.createElement('span');
+        textPart.textContent = 'id=' + m.id + ' ' + who + ' (' + m.messageType + ') ' + m.content + ' — ' + m.createdAt;
+        line.appendChild(textPart);
+
+        if (showPayButton && m.messageType === 'PAYMENT_REQUEST') {
+            const payButton = document.createElement('button');
+            payButton.className = 'pay-button';
+            payButton.dataset.chatMessageId = m.id;
+            payButton.textContent = '결제하기';
+            payButton.onclick = () => payTrade(m.id, payButton);
+            line.appendChild(payButton);
+        }
+
+        return line;
+    }
+
+    function renderHistory(messages, append) {
+        HISTORY_PANE_IDS.forEach((paneId) => {
+            const div = document.getElementById(paneId);
+            if (!append) div.innerHTML = '';
+
+            if (messages.length === 0 && !append) {
+                const line = document.createElement('div');
+                line.className = 'log-info history-empty-placeholder';
+                line.textContent = '(메시지 이력 없음)';
+                div.appendChild(line);
+                return;
+            }
+
+            const showPayButton = paneId === 'historyUser';
+            messages.forEach((m) => div.appendChild(buildMessageBubble(m, showPayButton)));
+        });
+    }
+
+    // 목록은 최신순(DESC)이라, 새로 도착한 메시지는 맨 위에 꽂아야 기존 페이지네이션 순서와 맞음.
+    // 두 연결이 완전히 독립이라, 같은 브로드캐스트라도 각 연결의 콜백에서 자기 pane에만 반영한다
+    // (양쪽 다 반영하면 두 연결 모두 같은 이벤트를 받아 중복으로 꽂히기 때문).
+    function appendLiveMessage(paneId, m) {
+        const div = document.getElementById(paneId);
+        const placeholder = div.querySelector('.history-empty-placeholder');
+        if (placeholder) placeholder.remove();
+        const showPayButton = paneId === 'historyUser';
+        div.insertBefore(buildMessageBubble(m, showPayButton), div.firstChild);
+        div.scrollTop = 0;
+    }
+
+    function markMessagePaid(paneId, chatMessageId) {
+        const div = document.getElementById(paneId);
+        const button = div.querySelector('.pay-button[data-chat-message-id="' + chatMessageId + '"]');
+        if (button) {
+            button.disabled = true;
+            button.textContent = '결제완료';
+        }
+    }
+
+    // WS 브로드캐스트는 트리거한 API에 따라 서로 다른 응답 타입을 그대로 보낸다(SendMessageResponse.Sent /
+    // TradeCreateResponse.Created / PaymentResponse.PaymentSuccess) — 공통 포맷이 아니라서 필드 존재 여부로 구분.
+    // paneId/label은 이 콜백을 호출한 연결(테넌트 or 구매자)이 어느 쪽인지를 나타낸다.
+    function handleBroadcastPayload(paneId, label, rawBody) {
+        let payload;
+        try {
+            payload = JSON.parse(rawBody);
+        } catch (e) {
             return;
         }
 
-        messages.forEach((m) => {
-            const line = document.createElement('div');
-            line.className = m.userId == null ? 'log-info' : 'log-recv';
-            const who = m.userId == null ? '[테넌트 발신]' : '[user ' + m.userId + ']';
-            line.textContent = 'id=' + m.id + ' ' + who + ' (' + m.messageType + ') ' + m.content + ' — ' + m.createdAt;
-            div.appendChild(line);
-        });
+        if (payload.message) {
+            // SendMessageResponse.Sent — 신규 TEXT 메시지
+            const m = payload.message;
+            log('[' + label + '] 수신(TEXT, ' + describeUserId(m.userId) + '): ' + m.content, 'recv');
+            appendLiveMessage(paneId, m);
+        } else if (payload.tradeStatus !== undefined) {
+            // PaymentResponse.PaymentSuccess — 새 메시지가 아니라 기존 PAYMENT_REQUEST 말풍선 상태 갱신
+            log('[' + label + '] 수신(결제 완료): chatMessageId=' + payload.chatMessageId + ' tradeStatus=' + payload.tradeStatus, 'recv');
+            markMessagePaid(paneId, payload.chatMessageId);
+        } else if (payload.messageType !== undefined) {
+            // TradeCreateResponse.Created — 신규 PAYMENT_REQUEST 메시지. content 필드가 없어서
+            // ChatMessageService.createPaymentRequestMessage의 고정 문구를 그대로 채워넣음
+            log('[' + label + '] 수신(PAYMENT_REQUEST, ' + describeUserId(payload.userId) + '): id=' + payload.id, 'recv');
+            appendLiveMessage(paneId, {
+                id: payload.id,
+                messageType: payload.messageType,
+                content: '결제 요청 드립니다',
+                userId: payload.userId,
+                createdAt: payload.createdAt
+            });
+        }
     }
 
     function clearLog() {
         document.getElementById('log').innerHTML = '';
     }
 
+    // 세션(토큰/연결)은 그대로 두고 화면에 렌더링된 채팅 이력만 지운 뒤 첫 페이지부터 다시 조회.
+    // 페이지 전체를 되돌리는 상단 "초기화"(resetAll)와 달리 채팅방 뷰 안에서 바로 쓰는 용도.
+    function clearHistory() {
+        clearHistoryPanes();
+        resetHistoryPaginationState();
+        setHistoryStatus('');
+        fetchMessages();
+    }
+
+    async function createTrade() {
+        const sellerToken = document.getElementById('sellerToken').value.trim();
+        const chatRoomId = document.getElementById('chatRoomId').value;
+
+        if (!sellerToken) { alert('판매자 세션 토큰이 없습니다. 먼저 0번에서 채팅방을 생성하세요.'); return; }
+        if (!chatRoomId) { alert('채팅방 ID가 없습니다.'); return; }
+
+        log('POST /api/v1/user/chat-rooms/' + chatRoomId + '/trades 요청 중...', 'info');
+        try {
+            const res = await fetch('/api/v1/user/chat-rooms/' + chatRoomId + '/trades', {
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + sellerToken }
+            });
+
+            if (!res.ok) {
+                const text = await res.text();
+                log('결제 요청 생성 실패 ' + res.status + ': ' + text, 'error');
+                return;
+            }
+
+            const data = await res.json();
+            log('결제 요청 생성 완료(' + res.status + ') — chatMessageId: ' + data.id, 'info');
+            // 2번 채팅방 반영은 별도 재조회 없이 WS 브로드캐스트(handleBroadcastPayload)로 실시간 처리됨
+        } catch (e) {
+            log('결제 요청 생성 fetch 실패: ' + e.message, 'error');
+        }
+    }
+
+    // 2번 채팅방의 PAYMENT_REQUEST 말풍선에 붙은 결제 버튼에서 호출됨 (chatMessageId는 그 메시지의 id)
+    async function payTrade(chatMessageId, buttonEl) {
+        const buyerToken = document.getElementById('token').value.trim();
+        const chatRoomId = document.getElementById('chatRoomId').value;
+
+        if (!buyerToken) { alert('구매자 세션 토큰이 없습니다.'); return; }
+        if (!chatRoomId) { alert('채팅방 ID가 없습니다.'); return; }
+
+        log('POST /api/v1/user/chat-rooms/' + chatRoomId + '/trades/' + chatMessageId + '/pay 요청 중...', 'info');
+        try {
+            const res = await fetch('/api/v1/user/chat-rooms/' + chatRoomId + '/trades/' + chatMessageId + '/pay', {
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + buyerToken }
+            });
+
+            if (!res.ok) {
+                const text = await res.text();
+                log('결제 처리 실패 ' + res.status + ': ' + text, 'error');
+                return;
+            }
+
+            const data = await res.json();
+            log('결제 처리 완료(' + res.status + ') — tradeStatus: ' + data.tradeStatus, 'info');
+            if (buttonEl) {
+                buttonEl.disabled = true;
+                buttonEl.textContent = '결제완료';
+            }
+        } catch (e) {
+            log('결제 처리 fetch 실패: ' + e.message, 'error');
+        }
+    }
+
+    // API Key만 바꿔서 처음부터 다시 테스트할 수 있도록 세션 상태를 전부 비운다.
+    // 0번 입력값(apiKey/externalUserId 등)은 그대로 둬서 필요한 값만 고쳐 바로 재시도 가능.
+    function resetAll() {
+        disconnectTenant();
+        disconnectUser();
+        document.getElementById('chatRoomId').value = '';
+        document.getElementById('token').value = '';
+        document.getElementById('sellerToken').value = '';
+        document.getElementById('content').value = '';
+        document.getElementById('tenantContent').value = '';
+        clearHistoryPanes();
+        document.getElementById('historyStatus').textContent = '';
+        document.getElementById('log').innerHTML = '';
+        resetHistoryPaginationState();
+        setStatus('statusTenant', '테넌트: 연결 안됨', false);
+        setStatus('statusUser', '구매자: 연결 안됨', false);
+        log('초기화 완료 — API Key(및 필요한 값)를 바꾸고 0번에서 채팅방을 다시 생성하세요.', 'info');
+    }
+
     // Enter 키로 메시지 전송
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && document.activeElement.id === 'content') sendMessage();
+        if (e.key !== 'Enter') return;
+        if (document.activeElement.id === 'content') sendMessage();
+        if (document.activeElement.id === 'tenantContent') sendTenantMessage();
     });
 </script>
 </body>

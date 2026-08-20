@@ -7,6 +7,7 @@ import com.chatpay.chat.dto.room.ChatRoomUpsertResult;
 import com.chatpay.chat.service.room.ChatRoomService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,7 +35,7 @@ public class ChatRoomController {
     // GlobalExceptionHandler에서 409 반환시, 같은 PUT을 처음부터 재호출해야 함(1회 재시도로 확정됨)
     @PutMapping("/{externalUserId}/{externalItemId}")
     @Operation(summary = "채팅방 생성")
-    public ResponseEntity<ChatRoomResponse> createChatRoom(@RequestBody ChatRoomCreateRequest request) {
+    public ResponseEntity<ChatRoomResponse> createChatRoom(@RequestBody @Valid ChatRoomCreateRequest request) {
 
         ChatRoomUpsertResult result = chatRoomService.createChatRoom(request);
 

@@ -1,5 +1,6 @@
 package com.chatpay.common.config;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
@@ -16,48 +17,80 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
+import java.util.Map;
+
 @Configuration
 @EnableWebSocketMessageBroker
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
+    private static final String CHAT_TOPIC_PREFIX = "/topic/chat/";
     private final JwtProvider jwtProvider;
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // 클라이언트가 WebSocket 연결을 맺는 HTTP 엔드포인트
-        // React: new Client({ brokerURL: 'ws://localhost:8080/ws' })
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*"); // 개발 환경용, 운영 시 도메인 지정 필요;
     }
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        // /topic 으로 시작하는 경로를 구독한 클라이언트에게 메시지 브로드캐스트
-        // 예: 클라이언트가 /topic/chat/1 구독 → 해당 채팅방 메시지 수신
         config.enableSimpleBroker("/topic");
     }
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        // STOMP CONNECT 시 JWT 서명 검증 — 미인증 클라이언트의 /topic 구독 차단
-        // WebSocket은 서버→클라이언트 push 전용이므로 세션에 tenantId/userId 저장 불필요
-        // 메시지 저장(INSERT)은 HTTP POST에서 처리하며, JWT 파싱은 해당 요청에서 별도 수행
         registration.interceptors(new ChannelInterceptor() {
+
             @Override
             public Message<?> preSend(Message<?> message, MessageChannel channel) {
+
                 StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
+
                 if (accessor == null) return message;
 
                 if (StompCommand.CONNECT.equals(accessor.getCommand())) {
                     String authHeader = accessor.getFirstNativeHeader("Authorization");
+
                     if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                         throw new MessageDeliveryException("Missing or malformed Authorization header");
                     }
+
+                    Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
+
+                    if (sessionAttributes == null) {
+                        throw new MessageDeliveryException("WebSocket session에 접근할 수 없습니다");
+                    }
+
                     try {
-                        jwtProvider.getClaims(authHeader.substring(7));
+                        Claims claims = jwtProvider.getClaims(authHeader.substring(7));
+                        sessionAttributes.put("chatRoomId", claims.get("chatRoomId", Long.class));
+
                     } catch (JwtException | IllegalArgumentException e) {
                         throw new MessageDeliveryException(e.getMessage());
+                    }
+
+                } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+                    String destination = accessor.getDestination();
+
+                    if (destination == null || !destination.startsWith(CHAT_TOPIC_PREFIX)) {
+                        throw new MessageDeliveryException("Invalid subscription destination");
+                    }
+
+                    Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
+
+                    Long tokenChatRoomId = sessionAttributes == null ? null : (Long) sessionAttributes.get("chatRoomId");
+
+                    Long destinationChatRoomId;
+                    try {
+                        destinationChatRoomId = Long.valueOf(destination.substring(CHAT_TOPIC_PREFIX.length()));
+
+                    } catch (NumberFormatException e) {
+                        throw new MessageDeliveryException("Invalid subscription destination");
+                    }
+
+                    if (!destinationChatRoomId.equals(tokenChatRoomId)) {
+                        throw new MessageDeliveryException("이 채팅방을 구독할 권한이 없습니다.");
                     }
                 }
                 return message;
