@@ -1,24 +1,30 @@
 package com.chatpay.common.config;
 
+import com.chatpay.common.exception.StompRejectedException;
+import com.chatpay.common.message.MessageResolver;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
-import org.springframework.messaging.MessageDeliveryException;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
 import java.util.Map;
 
+@Slf4j
 @Configuration
 @EnableWebSocketMessageBroker
 @RequiredArgsConstructor
@@ -26,6 +32,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private static final String CHAT_TOPIC_PREFIX = "/topic/chat/";
     private final JwtProvider jwtProvider;
+    private final MessageResolver messages;
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
@@ -35,7 +42,14 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        config.enableSimpleBroker("/topic");
+        config.enableSimpleBroker("/topic")
+                .setHeartbeatValue(new long[] {10000, 10000})
+                .setTaskScheduler(heartbeatTaskScheduler());
+    }
+
+    @Bean
+    public TaskScheduler heartbeatTaskScheduler() {
+        return new ThreadPoolTaskScheduler();
     }
 
     @Override
@@ -52,14 +66,20 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 if (StompCommand.CONNECT.equals(accessor.getCommand())) {
                     String authHeader = accessor.getFirstNativeHeader("Authorization");
 
-                    if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                        throw new MessageDeliveryException("Missing or malformed Authorization header");
+                    if (authHeader == null) {
+                        log.warn("STOMP CONNECT rejected: missing Authorization header");
+                        throw new StompRejectedException(messages.get("stomp.connect.unauthorized"));
+                    }
+                    if (!authHeader.startsWith("Bearer ")) {
+                        log.warn("STOMP CONNECT rejected: malformed Authorization header");
+                        throw new StompRejectedException(messages.get("stomp.connect.unauthorized"));
                     }
 
                     Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
 
                     if (sessionAttributes == null) {
-                        throw new MessageDeliveryException("WebSocket session에 접근할 수 없습니다");
+                        log.error("STOMP CONNECT rejected: session attributes unavailable - check WebSocket configuration");
+                        throw new StompRejectedException(messages.get("stomp.connect.session-error"));
                     }
 
                     try {
@@ -67,14 +87,16 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                         sessionAttributes.put("chatRoomId", claims.get("chatRoomId", Long.class));
 
                     } catch (JwtException | IllegalArgumentException e) {
-                        throw new MessageDeliveryException(e.getMessage());
+                        log.warn("STOMP CONNECT rejected: JWT validation failed - {}", e.getMessage());
+                        throw new StompRejectedException(messages.get("stomp.connect.unauthorized"));
                     }
 
                 } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
                     String destination = accessor.getDestination();
 
                     if (destination == null || !destination.startsWith(CHAT_TOPIC_PREFIX)) {
-                        throw new MessageDeliveryException("Invalid subscription destination");
+                        log.warn("STOMP SUBSCRIBE rejected: invalid destination={}", destination);
+                        throw new StompRejectedException(messages.get("stomp.subscribe.invalid-request"));
                     }
 
                     Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
@@ -86,11 +108,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                         destinationChatRoomId = Long.valueOf(destination.substring(CHAT_TOPIC_PREFIX.length()));
 
                     } catch (NumberFormatException e) {
-                        throw new MessageDeliveryException("Invalid subscription destination");
+                        log.warn("STOMP SUBSCRIBE rejected: failed to parse chatRoomId, destination={}", destination);
+                        throw new StompRejectedException(messages.get("stomp.subscribe.invalid-request"));
                     }
 
                     if (!destinationChatRoomId.equals(tokenChatRoomId)) {
-                        throw new MessageDeliveryException("이 채팅방을 구독할 권한이 없습니다.");
+                        log.warn("STOMP SUBSCRIBE rejected: chatRoomId mismatch (destination={}, token={})", destinationChatRoomId, tokenChatRoomId);
+                        throw new StompRejectedException(messages.get("stomp.subscribe.access-denied"));
                     }
                 }
                 return message;

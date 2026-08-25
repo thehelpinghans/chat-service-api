@@ -1,5 +1,6 @@
 package com.chatpay.chat.controller.message;
 
+import com.chatpay.chat.dto.message.FindMessagesAfterResponse;
 import com.chatpay.chat.dto.message.FindMessagesResponse;
 import com.chatpay.chat.dto.message.SendMessageResponse;
 import com.chatpay.common.broadcast.ChatRoomBroadcaster;
@@ -14,13 +15,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * 구매자 브라우저(우리 SDK/iframe 경유)의 채팅 메시지 전송·조회 엔드포인트. Bearer 전용.
- *
- * 인증: TenantFilter가 사전에 JWT를 검증하고
- *       tenantId → TenantIdentifierResolver(Hibernate 멀티테넌시 자동 적용)
- *       userId   → RequestAttribute(USER_ATTRIBUTE)로 이 컨트롤러에 전달.
- */
 @RestController
 @RequestMapping("/api/v1/user/chat-rooms")
 @RequiredArgsConstructor
@@ -32,7 +26,7 @@ public class ChatMessageController {
 
     @PostMapping("/{chatRoomId}/messages")
     @Operation(summary = "채팅 메시지 전송")
-    public ResponseEntity<?> sendMessage(
+    public ResponseEntity<? extends SendMessageResponse> sendMessage(
             @PathVariable Long chatRoomId,
             @RequestBody @Valid ChatMessageRequest request,
             @RequestAttribute(value = TenantFilter.CHAT_ROOM_ATTRIBUTE, required = false) Long tokenChatRoomId,
@@ -49,19 +43,22 @@ public class ChatMessageController {
 
             case SendMessageResponse.ChatRoomAccessDenied r -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(r);
 
+            case SendMessageResponse.ChatRoomNotFound r -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(r);
+
+            case SendMessageResponse.UserNotFound r -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(r);
+
             case SendMessageResponse.UserSuspended r -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(r);
         };
     }
 
     @GetMapping("/{chatRoomId}/messages")
     @Operation(summary = "채팅 메시지 목록 조회")
-    public ResponseEntity<?> getMessages(
+    public ResponseEntity<? extends FindMessagesResponse> getMessages(
             @PathVariable Long chatRoomId,
             @RequestAttribute(value = TenantFilter.CHAT_ROOM_ATTRIBUTE, required = false) Long tokenChatRoomId,
             @RequestParam(required = false) Long lastMessageId,
             @RequestParam(defaultValue = "20") int size) {
 
-        //TODO 개별+번들 방식으로 TenantFilter 수정 검토, 다른 방법이 있는지 확인 필요, 업계 패턴 조사해야함
         FindMessagesResponse response = chatMessageService.findMessages(chatRoomId, tokenChatRoomId, lastMessageId, size);
 
         return switch (response) {
@@ -69,6 +66,23 @@ public class ChatMessageController {
             case FindMessagesResponse.Found r -> ResponseEntity.ok(r);
 
             case FindMessagesResponse.ChatRoomAccessDenied r -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(r);
+        };
+    }
+
+    @GetMapping("/{chatRoomId}/messages/sync")
+    @Operation(summary = "재연결 시 메시지 캐치업 조회")
+    public ResponseEntity<? extends FindMessagesAfterResponse> syncMessages(
+            @PathVariable Long chatRoomId,
+            @RequestAttribute(value = TenantFilter.CHAT_ROOM_ATTRIBUTE, required = false) Long tokenChatRoomId,
+            @RequestParam Long afterMessageId,
+            @RequestParam(defaultValue = "20") int size) {
+
+        FindMessagesAfterResponse response = chatMessageService.findMessagesAfter(chatRoomId, tokenChatRoomId, afterMessageId, size);
+
+        return switch (response) {
+            case FindMessagesAfterResponse.Found r -> ResponseEntity.ok(r);
+
+            case FindMessagesAfterResponse.ChatRoomAccessDenied r -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(r);
         };
     }
 }
