@@ -37,7 +37,7 @@ public class ChatRoomController {
     @Operation(summary = "채팅방 생성")
     public ResponseEntity<ChatRoomResponse> createChatRoom(@RequestBody @Valid ChatRoomCreateRequest request) {
 
-        ChatRoomUpsertResult result = chatRoomService.createChatRoom(request);
+        ChatRoomUpsertResult result = chatRoomService.getOrCreateChatRoom(request);
 
         HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
 

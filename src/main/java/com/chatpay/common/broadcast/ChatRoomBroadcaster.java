@@ -10,7 +10,7 @@ public class ChatRoomBroadcaster {
 
     private final SimpMessagingTemplate messagingTemplate;
 
-    public void broadcast(Long chatRoomId, Object payload) {
+    public void send(Long chatRoomId, Object payload) {
         messagingTemplate.convertAndSend("/topic/chat/" + chatRoomId, payload);
     }
 }

@@ -28,7 +28,8 @@ public class UserService {
         walletRepository.save(Wallet.create(userRepository.getReferenceById(saved.getId())));
         return saved;
     }
-    public Optional<User> findUserById(String externalUserId) {
+
+    public Optional<User> findUserByExternalId(String externalUserId) {
         return userRepository.findByExternalId(externalUserId);
     }
 }

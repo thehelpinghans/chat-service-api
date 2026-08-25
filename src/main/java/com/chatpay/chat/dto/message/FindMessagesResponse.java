@@ -4,5 +4,5 @@ import java.util.List;
 
 public sealed interface FindMessagesResponse {
     record Found(List<ChatMessageResponse> messageList) implements FindMessagesResponse {}
-    record ChatRoomAccessDenied() implements FindMessagesResponse {}
+    record ChatRoomAccessDenied(String reason) implements FindMessagesResponse {}
 }

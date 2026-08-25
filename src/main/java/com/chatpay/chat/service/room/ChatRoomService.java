@@ -32,7 +32,7 @@ public class ChatRoomService {
     }
 
     @Transactional
-    public ChatRoomUpsertResult createChatRoom(ChatRoomCreateRequest request) {
+    public ChatRoomUpsertResult getOrCreateChatRoom(ChatRoomCreateRequest request) {
 
         User user = userService.getOrCreateUser(request.externalUserId());
 

@@ -2,7 +2,6 @@ package com.chatpay.trade.controller;
 
 import com.chatpay.common.broadcast.ChatRoomBroadcaster;
 import com.chatpay.common.config.TenantFilter;
-import com.chatpay.common.message.MessageResolver;
 import com.chatpay.trade.dto.PaymentResponse;
 import com.chatpay.trade.dto.TradeCreateResponse;
 import com.chatpay.trade.service.TradeService;
@@ -12,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 // 판매자(테넌트) sdk.js 위젯이 Bearer 세션으로 직접 호출하는 결제 요청 생성 API.
 // 판매자가 결제 요청을 트리거하면 Trade(PENDING) + ChatMessage(PAYMENT_REQUEST)를 한 트랜잭션으로 생성한다.
@@ -27,11 +25,10 @@ public class TradeController {
 
     private final TradeService tradeService;
     private final ChatRoomBroadcaster chatRoomBroadcaster;
-    private final MessageResolver messages;
 
     @PostMapping("/{chatRoomId}/trades")
     @Operation(summary = "결제 요청 생성")
-    public ResponseEntity<TradeCreateResponse.Created> createTrade(
+    public ResponseEntity<?> createTrade(
             @PathVariable Long chatRoomId,
             @RequestAttribute(value = TenantFilter.CHAT_ROOM_ATTRIBUTE, required = false) Long tokenChatRoomId,
             @RequestAttribute(value = TenantFilter.USER_ATTRIBUTE, required = false) Long userId) {
@@ -39,23 +36,23 @@ public class TradeController {
         TradeCreateResponse response = tradeService.createTrade(chatRoomId, tokenChatRoomId, userId);
 
         if (response instanceof TradeCreateResponse.Created success) {
-            chatRoomBroadcaster.broadcast(chatRoomId, success);
+            chatRoomBroadcaster.send(chatRoomId, success);
         }
 
         return switch (response) {
             case TradeCreateResponse.Created r -> ResponseEntity.status(HttpStatus.CREATED).body(r);
 
-            case TradeCreateResponse.SellerOnly _ -> throw new ResponseStatusException(HttpStatus.FORBIDDEN, messages.get("trade.create.seller-only"));
+            case TradeCreateResponse.SellerOnly r -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(r);
 
-            case TradeCreateResponse.ChatRoomAccessDenied _ -> throw new ResponseStatusException(HttpStatus.FORBIDDEN, messages.get("trade.create.chatroom-access-denied"));
+            case TradeCreateResponse.ChatRoomAccessDenied r -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(r);
 
-            case TradeCreateResponse.ChatRoomNotFound _ -> throw new ResponseStatusException(HttpStatus.NOT_FOUND, messages.get("trade.create.chatroom-not-found"));
+            case TradeCreateResponse.ChatRoomNotFound r -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(r);
         };
     }
 
     @PostMapping("/{chatRoomId}/trades/{chatMessageId}/pay")
     @Operation(summary = "결제 처리")
-    public ResponseEntity<PaymentResponse.PaymentSuccess> payTrade(
+    public ResponseEntity<?> payTrade(
             @PathVariable Long chatRoomId,
             @PathVariable Long chatMessageId,
             @RequestAttribute(value = TenantFilter.CHAT_ROOM_ATTRIBUTE, required = false) Long tokenChatRoomId,
@@ -64,25 +61,25 @@ public class TradeController {
         PaymentResponse response = tradeService.payTrade(chatRoomId, chatMessageId, tokenChatRoomId, userId);
 
         if (response instanceof PaymentResponse.PaymentSuccess success) {
-            chatRoomBroadcaster.broadcast(chatRoomId, success);
+            chatRoomBroadcaster.send(chatRoomId, success);
         }
 
         return switch (response) {
             case PaymentResponse.PaymentSuccess r -> ResponseEntity.ok(r);
 
-            case PaymentResponse.PaymentNotFound _ -> throw new ResponseStatusException(HttpStatus.NOT_FOUND, messages.get("payment.not-found"));
+            case PaymentResponse.PaymentNotFound r -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(r);
 
-            case PaymentResponse.ChatRoomAccessDenied _ -> throw new ResponseStatusException(HttpStatus.FORBIDDEN, messages.get("payment.chatroom-access-denied"));
+            case PaymentResponse.ChatRoomAccessDenied r -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(r);
 
-            case PaymentResponse.InvalidRequestType _ -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, messages.get("payment.invalid-request-type"));
+            case PaymentResponse.InvalidRequestType r -> ResponseEntity.status(HttpStatus.BAD_REQUEST).body(r);
 
-            case PaymentResponse.PaymentOwnerMismatch _ -> throw new ResponseStatusException(HttpStatus.FORBIDDEN, messages.get("payment.owner-mismatch"));
+            case PaymentResponse.PaymentOwnerMismatch r -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(r);
 
-            case PaymentResponse.PaymentAlreadyProcessed _ -> throw new ResponseStatusException(HttpStatus.CONFLICT, messages.get("payment.already-processed"));
+            case PaymentResponse.PaymentAlreadyProcessed r -> ResponseEntity.status(HttpStatus.CONFLICT).body(r);
 
-            case PaymentResponse.WalletNotFound _ -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, messages.get("payment.wallet-not-found"));
+            case PaymentResponse.WalletNotFound r -> ResponseEntity.status(HttpStatus.BAD_REQUEST).body(r);
 
-            case PaymentResponse.InsufficientBalance _ -> throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, messages.get("payment.insufficient-balance"));
+            case PaymentResponse.InsufficientBalance r -> ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(r);
         };
     }
 }

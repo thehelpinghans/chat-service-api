@@ -15,6 +15,7 @@ import com.chatpay.trade.repository.WalletRepository;
 import com.chatpay.trade.repository.WalletTransactionRepository;
 import com.chatpay.chat.service.message.ChatMessageService;
 import com.chatpay.chat.service.room.ChatRoomService;
+import com.chatpay.common.message.MessageResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,22 +29,23 @@ public class TradeService {
     private final TradeRepository tradeRepository;
     private final WalletRepository walletRepository;
     private final WalletTransactionRepository walletTransactionRepository;
+    private final MessageResolver messages;
 
     //TODO 멱등성 확보가 안되어있음, 추후 추가 필요
     @Transactional
     public TradeCreateResponse createTrade(Long chatRoomId, Long tokenChatRoomId, Long userId) {
 
         if (userId != null) {
-            return new TradeCreateResponse.SellerOnly();
+            return new TradeCreateResponse.SellerOnly(messages.get("trade.create.seller-only"));
         }
 
         if (!chatRoomId.equals(tokenChatRoomId)) {
-            return new TradeCreateResponse.ChatRoomAccessDenied();
+            return new TradeCreateResponse.ChatRoomAccessDenied(messages.get("trade.create.chatroom-access-denied"));
         }
 
         ChatRoom chatRoom = chatRoomService.findChatRoomById(chatRoomId).orElse(null);
         if (chatRoom == null) {
-            return new TradeCreateResponse.ChatRoomNotFound();
+            return new TradeCreateResponse.ChatRoomNotFound(messages.get("trade.create.chatroom-not-found"));
         }
 
         ChatMessage paymentMessage = chatMessageService.createPaymentRequestMessage(chatRoom);
@@ -54,23 +56,22 @@ public class TradeService {
         return new TradeCreateResponse.Created(paymentMessage.getId(), paymentMessage.getMessageType(),null, paymentMessage.getCreatedAt());
     }
 
-    // 검증 실패는 예외가 아니라 PaymentResponse의 실패 레코드로 리턴 — 컨트롤러가 switch로 상태코드를 결정함
     @Transactional
     public PaymentResponse payTrade(Long chatRoomId, Long chatMessageId, Long tokenChatRoomId, Long userId) {
 
-        if (PayTradeValidator.checkChatRoomAccess(chatRoomId, tokenChatRoomId)
+        if (PayTradeValidator.checkChatRoomAccess(chatRoomId, tokenChatRoomId, messages)
                 instanceof PayTradeValidator.Check.Fail(PaymentResponse response)) return response;
 
         ChatMessage message = chatMessageService.findChatMessageById(chatMessageId).orElse(null);
-        if (PayTradeValidator.checkPaymentRequestMessage(message, chatRoomId)
+        if (PayTradeValidator.checkPaymentRequestMessage(message, chatRoomId, messages)
                 instanceof PayTradeValidator.Check.Fail(PaymentResponse response)) return response;
 
         Trade currentTrade = tradeRepository.findByChatMessageId(chatMessageId).orElse(null);
-        if (PayTradeValidator.checkPayableTrade(currentTrade, userId)
+        if (PayTradeValidator.checkPayableTrade(currentTrade, userId, messages)
                 instanceof PayTradeValidator.Check.Fail(PaymentResponse response)) return response;
 
         Wallet wallet = walletRepository.findById(userId).orElse(null);
-        if (PayTradeValidator.checkSufficientWallet(wallet, currentTrade.getAmount())
+        if (PayTradeValidator.checkSufficientWallet(wallet, currentTrade.getAmount(), messages)
                 instanceof PayTradeValidator.Check.Fail(PaymentResponse response)) return response;
 
         wallet.pay(currentTrade.getAmount());

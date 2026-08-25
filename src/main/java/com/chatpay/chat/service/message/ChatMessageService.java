@@ -11,6 +11,7 @@ import com.chatpay.chat.repository.ChatMessageRepository;
 import com.chatpay.chat.repository.ChatRoomRepository;
 import com.chatpay.common.domain.User;
 import com.chatpay.common.domain.UserStatus;
+import com.chatpay.common.message.MessageResolver;
 import com.chatpay.common.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
@@ -28,12 +29,13 @@ public class ChatMessageService {
     private final UserRepository userRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final MessageResolver messages;
 
     @Transactional
-    public SendMessageResponse sendMessage(Long chatRoomId, Long tokenChatRoomId, Long userId, ChatMessageRequest request) {
+    public SendMessageResponse createMessage(Long chatRoomId, Long tokenChatRoomId, Long userId, ChatMessageRequest request) {
 
         if (!chatRoomId.equals(tokenChatRoomId)) {
-            return new SendMessageResponse.ChatRoomAccessDenied();
+            return new SendMessageResponse.ChatRoomAccessDenied(messages.get("chat.send.access-denied"));
         }
 
         ChatRoom chatRoom = chatRoomRepository.findById(chatRoomId)
@@ -44,7 +46,7 @@ public class ChatMessageService {
             user = userRepository.findById(userId)
                     .orElseThrow(() -> new IllegalStateException("토큰이 유효한데 사용자가 존재하지 않음: " + userId));
             if (user.getStatus() != UserStatus.ACTIVE) {
-                return new SendMessageResponse.UserSuspended();
+                return new SendMessageResponse.UserSuspended(messages.get("chat.send.user-suspended"));
             }
         }
 
@@ -59,17 +61,17 @@ public class ChatMessageService {
     public FindMessagesResponse findMessages(Long chatRoomId, Long tokenChatRoomId, Long lastMessageId, int size) {
 
         if (!chatRoomId.equals(tokenChatRoomId)) {
-            return new FindMessagesResponse.ChatRoomAccessDenied();
+            return new FindMessagesResponse.ChatRoomAccessDenied(messages.get("chat.access-denied"));
         }
 
-        List<ChatMessage> messages;
+        List<ChatMessage> chatMessages;
         if (lastMessageId == null) {
-            messages = chatMessageRepository.findByChatRoomIdOrderByIdDesc(chatRoomId, Limit.of(size));
+            chatMessages = chatMessageRepository.findByChatRoomIdOrderByIdDesc(chatRoomId, Limit.of(size));
         } else {
-            messages = chatMessageRepository.findByChatRoomIdAndIdLessThanOrderByIdDesc(chatRoomId, lastMessageId, Limit.of(size));
+            chatMessages = chatMessageRepository.findByChatRoomIdAndIdLessThanOrderByIdDesc(chatRoomId, lastMessageId, Limit.of(size));
         }
 
-        List<ChatMessageResponse> responses = messages.stream()
+        List<ChatMessageResponse> responses = chatMessages.stream()
                 .map(m -> {
                     User user = m.getUser();
                     return new ChatMessageResponse(
