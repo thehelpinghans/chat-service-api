@@ -12,11 +12,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-// 판매자(테넌트) sdk.js 위젯이 Bearer 세션으로 직접 호출하는 결제 요청 생성 API.
-// 판매자가 결제 요청을 트리거하면 Trade(PENDING) + ChatMessage(PAYMENT_REQUEST)를 한 트랜잭션으로 생성한다.
-// (논리설계.md 결제 프로세스 플로우 1단계 근거)
-// 금액은 항상 chatRoom.getItem().getPrice() 스냅샷 고정 — 협의/네고 없음, 클라이언트 입력값이 없어서 요청 바디 없음.
-// 판매자 전용 가드(userId != null → 403)는 TradeService.createTrade 내부에서 처리.
 @RestController
 @RequestMapping("/api/v1/user/chat-rooms")
 @RequiredArgsConstructor
@@ -28,7 +23,7 @@ public class TradeController {
 
     @PostMapping("/{chatRoomId}/trades")
     @Operation(summary = "결제 요청 생성")
-    public ResponseEntity<?> createTrade(
+    public ResponseEntity<? extends TradeCreateResponse> createTrade(
             @PathVariable Long chatRoomId,
             @RequestAttribute(value = TenantFilter.CHAT_ROOM_ATTRIBUTE, required = false) Long tokenChatRoomId,
             @RequestAttribute(value = TenantFilter.USER_ATTRIBUTE, required = false) Long userId) {
@@ -40,6 +35,8 @@ public class TradeController {
         }
 
         return switch (response) {
+            case TradeCreateResponse.Found r -> ResponseEntity.ok(r);
+
             case TradeCreateResponse.Created r -> ResponseEntity.status(HttpStatus.CREATED).body(r);
 
             case TradeCreateResponse.SellerOnly r -> ResponseEntity.status(HttpStatus.FORBIDDEN).body(r);
@@ -52,7 +49,7 @@ public class TradeController {
 
     @PostMapping("/{chatRoomId}/trades/{chatMessageId}/pay")
     @Operation(summary = "결제 처리")
-    public ResponseEntity<?> payTrade(
+    public ResponseEntity<? extends PaymentResponse> payTrade(
             @PathVariable Long chatRoomId,
             @PathVariable Long chatMessageId,
             @RequestAttribute(value = TenantFilter.CHAT_ROOM_ATTRIBUTE, required = false) Long tokenChatRoomId,

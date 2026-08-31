@@ -20,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 @Service
 @RequiredArgsConstructor
 public class TradeService {
@@ -31,7 +33,6 @@ public class TradeService {
     private final WalletTransactionRepository walletTransactionRepository;
     private final MessageResolver messages;
 
-    //TODO 멱등성 확보가 안되어있음, 추후 추가 필요
     @Transactional
     public TradeCreateResponse createTrade(Long chatRoomId, Long tokenChatRoomId, Long userId) {
 
@@ -48,10 +49,17 @@ public class TradeService {
             return new TradeCreateResponse.ChatRoomNotFound(messages.get("trade.create.chatroom-not-found"));
         }
 
+        Trade existingPendingTrade = tradeRepository.findByChatRoomIdAndTradeStatus(chatRoom.getId(), TradeStatus.PENDING).orElse(null);
+        if (existingPendingTrade != null) {
+            ChatMessage existingMessage = existingPendingTrade.getChatMessage();
+            return new TradeCreateResponse.Found(existingMessage.getId(), existingMessage.getMessageType(), null, existingMessage.getCreatedAt());
+        }
+
         ChatMessage paymentMessage = chatMessageService.createPaymentRequestMessage(chatRoom);
 
         Item item = chatRoom.getItem();
-        tradeRepository.save(Trade.create(chatRoom.getUser(), item, item.getName(), item.getPrice(), paymentMessage));
+
+        tradeRepository.save(Trade.create(chatRoom.getUser(), item, item.getName(), item.getPrice(), chatRoom, paymentMessage));
 
         return new TradeCreateResponse.Created(paymentMessage.getId(), paymentMessage.getMessageType(),null, paymentMessage.getCreatedAt());
     }
