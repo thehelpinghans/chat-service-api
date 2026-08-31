@@ -22,7 +22,7 @@ public class ChatRoomTokenController {
 
     @PostMapping("/{chatRoomId}/tokens")
     @Operation(summary = "구매자 세션 토큰 발급")
-    public ResponseEntity<?> issueUserToken(
+    public ResponseEntity<? extends IssueUserTokenResponse> issueUserToken(
             @PathVariable Long chatRoomId,
             @RequestBody TokenIssueRequest request) {
 
@@ -41,7 +41,7 @@ public class ChatRoomTokenController {
 
     @PostMapping("/{chatRoomId}/tenant-tokens")
     @Operation(summary = "테넌트(판매자) 세션 토큰 발급")
-    public ResponseEntity<?> issueTenantToken(@PathVariable Long chatRoomId) {
+    public ResponseEntity<? extends IssueTenantTokenResponse> issueTenantToken(@PathVariable Long chatRoomId) {
 
         IssueTenantTokenResponse response = chatRoomTokenService.issueTenantToken(chatRoomId);
 

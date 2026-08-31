@@ -43,11 +43,10 @@ public class Wallet extends BaseEntity {
 
     public void pay(long amount) {
         if (amount <= 0) {
-            throw new IllegalArgumentException("Wallet 결제 금액 불변식 위반: amount=" + amount + " (amount > 0 이어야 함)");
+            throw new IllegalArgumentException("Payment amount must be positive: " + amount);
         }
         if (this.balance < amount) {
-            throw new IllegalArgumentException(
-                    "Wallet 잔액 불변식 위반: balance=" + this.balance + ", amount=" + amount + " (balance >= amount 이어야 함)");
+            throw new IllegalStateException("Insufficient balance: balance=" + this.balance + ", amount=" + amount);
         }
         this.balance -= amount;
     }

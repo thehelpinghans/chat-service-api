@@ -1,6 +1,8 @@
 package com.chatpay.common.exception;
 
-public class StompRejectedException extends RuntimeException {
+import org.springframework.messaging.MessagingException;
+
+public class StompRejectedException extends MessagingException {
     public StompRejectedException(String clientMessage) {
         super(clientMessage);
     }

@@ -111,7 +111,7 @@ public class ChatMessageService {
     }
 
     public ChatMessage createPaymentRequestMessage(ChatRoom chatRoom) {
-        return chatMessageRepository.save(ChatMessage.create(chatRoom, null, "결제 요청 드립니다", MessageType.PAYMENT_REQUEST));
+        return chatMessageRepository.save(ChatMessage.create(chatRoom, null, "お支払いリクエストが届きました", MessageType.PAYMENT_REQUEST));
     }
 
     public Optional<ChatMessage> findChatMessageById(Long chatMessageId) {

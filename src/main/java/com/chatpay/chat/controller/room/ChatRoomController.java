@@ -22,7 +22,6 @@ public class ChatRoomController {
 
     private final ChatRoomService chatRoomService;
 
-    // 고객사 백엔드에서 호출하는 API(클라이언트 호출 금지)
     @GetMapping("/{externalUserId}/{externalItemId}")
     @Operation(summary = "채팅방 조회")
     public ResponseEntity<ChatRoomLookupResponse> findChatRoom(@PathVariable String externalUserId, @PathVariable String externalItemId) {
@@ -32,7 +31,6 @@ public class ChatRoomController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    // GlobalExceptionHandler에서 409 반환시, 같은 PUT을 처음부터 재호출해야 함(1회 재시도로 확정됨)
     @PutMapping("/{externalUserId}/{externalItemId}")
     @Operation(summary = "채팅방 생성")
     public ResponseEntity<ChatRoomResponse> createChatRoom(@RequestBody @Valid ChatRoomCreateRequest request) {

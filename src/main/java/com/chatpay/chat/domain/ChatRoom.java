@@ -19,8 +19,6 @@ import java.util.List;
 })
 public class ChatRoom extends BaseEntity {
 
-    //TODO createTrade 중복PENDING 방지: ChatRoom을 Aggregate Root로 @Version 도입 검토 중.
-    // OPTIMISTIC_FORCE_INCREMENT 재현 테스트로 신뢰성 확인 후 필드 추가 여부 결정.
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
