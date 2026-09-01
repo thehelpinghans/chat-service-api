@@ -10,7 +10,6 @@ import com.chatpay.trade.dto.PaymentResponse;
 
 import java.util.Objects;
 
-// payTrade 파라미터 검증 전용 — I/O 없는 순수 함수만, 통과/실패를 Check로 표현(null 안 씀)
 class PayTradeValidator {
 
     sealed interface Check {
@@ -18,6 +17,9 @@ class PayTradeValidator {
         record Fail(PaymentResponse response) implements Check {}
     }
 
+    /**
+     * @return 通過時はPass。chatRoomIdがトークンのchatRoomIdと異なる場合はFail(ChatRoomAccessDenied)。
+     */
     static Check checkChatRoomAccess(Long chatRoomId, Long tokenChatRoomId, MessageResolver messages) {
         if (!Objects.equals(chatRoomId, tokenChatRoomId)) {
             return new Check.Fail(new PaymentResponse.ChatRoomAccessDenied(messages.get("payment.chatroom-access-denied")));
@@ -25,6 +27,10 @@ class PayTradeValidator {
         return new Check.Pass();
     }
 
+    /**
+     * @return 通過時はPass。messageが見つからない場合はFail(PaymentNotFound)、messageが別のチャットルームに
+     * 属する場合はFail(ChatRoomAccessDenied)、PAYMENT_REQUESTでない場合はFail(InvalidRequestType)。
+     */
     static Check checkPaymentRequestMessage(ChatMessage message, Long chatRoomId, MessageResolver messages) {
         if (message == null) {
             return new Check.Fail(new PaymentResponse.PaymentNotFound(messages.get("payment.not-found")));
@@ -38,6 +44,10 @@ class PayTradeValidator {
         return new Check.Pass();
     }
 
+    /**
+     * @return 通過時はPass。tradeが見つからない場合はFail(PaymentNotFound)、所有者でない場合は
+     * Fail(PaymentOwnerMismatch)、PENDING以外の場合はFail(PaymentAlreadyProcessed)。
+     */
     static Check checkPayableTrade(Trade trade, Long userId, MessageResolver messages) {
         if (trade == null) {
             return new Check.Fail(new PaymentResponse.PaymentNotFound(messages.get("payment.not-found")));
@@ -51,6 +61,9 @@ class PayTradeValidator {
         return new Check.Pass();
     }
 
+    /**
+     * @return 通過時はPass。walletが見つからない場合はFail(WalletNotFound)、残高不足の場合はFail(InsufficientBalance)。
+     */
     static Check checkSufficientWallet(Wallet wallet, long amount, MessageResolver messages) {
         if (wallet == null) {
             return new Check.Fail(new PaymentResponse.WalletNotFound(messages.get("payment.wallet-not-found")));

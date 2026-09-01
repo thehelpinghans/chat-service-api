@@ -83,9 +83,15 @@ public class TradeService {
                 instanceof PayTradeValidator.Check.Fail(PaymentResponse response)) return response;
 
         wallet.pay(currentTrade.getAmount());
+
+        currentTrade.changeStatus(TradeStatus.PAID);
+
+        // flushを省略すると、上2行のUPDATE(dirty checking由来)はコミット時まで遅延し、INSERTより後で実行される。
+        // INSERTは先に共有ロックを取得するため、同時決済時は双方のトランザクションが排他ロックへの切替待ちとなり、デッドロックが発生する。
+        walletRepository.flush();
+
         walletTransactionRepository.save(
                 WalletTransaction.createPayment(wallet, currentTrade, currentTrade.getAmount()));
-        currentTrade.changeStatus(TradeStatus.PAID);
 
         return new PaymentResponse.PaymentSuccess(chatMessageId, currentTrade.getTradeStatus());
     }
