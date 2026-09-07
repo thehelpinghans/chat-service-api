@@ -36,5 +36,3 @@ src/main/resources/data.sql
 # 로컬 개발 문서
 CLAUDE.md
 
-# 로컬 전용 테스트
-src/test/
