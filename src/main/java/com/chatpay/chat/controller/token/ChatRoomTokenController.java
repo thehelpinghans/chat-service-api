@@ -4,7 +4,8 @@ import com.chatpay.chat.dto.token.ChatRoomTokenResponse;
 import com.chatpay.chat.dto.token.IssueTenantTokenResponse;
 import com.chatpay.chat.dto.token.IssueUserTokenResponse;
 import com.chatpay.chat.dto.token.TokenIssueRequest;
-import com.chatpay.chat.service.token.ChatRoomTokenService;
+import com.chatpay.chat.service.token.tenant.TenantTokenService;
+import com.chatpay.chat.service.token.user.UserTokenService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,8 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Chat Room Token", description = "채팅방 세션 토큰 발급 API")
 public class ChatRoomTokenController {
 
-    private final ChatRoomTokenService chatRoomTokenService;
+    private final UserTokenService userTokenService;
+    private final TenantTokenService tenantTokenService;
 
     @PostMapping("/{chatRoomId}/tokens")
     @Operation(summary = "구매자 세션 토큰 발급")
@@ -26,7 +28,7 @@ public class ChatRoomTokenController {
             @PathVariable Long chatRoomId,
             @RequestBody TokenIssueRequest request) {
 
-        IssueUserTokenResponse response = chatRoomTokenService.issueUserToken(chatRoomId, request.externalUserId());
+        IssueUserTokenResponse response = userTokenService.issueUserToken(chatRoomId, request.externalUserId());
 
         return switch (response) {
             case IssueUserTokenResponse.Issued r -> ResponseEntity.ok(r);
@@ -43,7 +45,7 @@ public class ChatRoomTokenController {
     @Operation(summary = "테넌트(판매자) 세션 토큰 발급")
     public ResponseEntity<? extends IssueTenantTokenResponse> issueTenantToken(@PathVariable Long chatRoomId) {
 
-        IssueTenantTokenResponse response = chatRoomTokenService.issueTenantToken(chatRoomId);
+        IssueTenantTokenResponse response = tenantTokenService.issueTenantToken(chatRoomId);
 
         return switch (response) {
             case IssueTenantTokenResponse.Issued r -> ResponseEntity.ok(r);

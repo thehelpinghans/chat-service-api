@@ -1,21 +1,21 @@
-package com.chatpay.chat.service.token;
+package com.chatpay.chat.service.token.user;
 
 import com.chatpay.chat.domain.ChatRoom;
 import com.chatpay.chat.dto.token.ChatRoomTokenResponse;
-import com.chatpay.chat.dto.token.IssueTenantTokenResponse;
 import com.chatpay.chat.dto.token.IssueUserTokenResponse;
 import com.chatpay.chat.service.room.ChatRoomService;
 import com.chatpay.common.config.JwtProvider;
-import com.chatpay.common.config.TenantIdentifierResolver;
 import com.chatpay.common.domain.User;
 import com.chatpay.common.message.MessageResolver;
+import com.chatpay.common.multitenancy.TenantIdentifierResolver;
 import com.chatpay.common.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class ChatRoomTokenService {
+public class UserTokenService {
 
     private final UserService userService;
     private final ChatRoomService chatRoomService;
@@ -23,40 +23,24 @@ public class ChatRoomTokenService {
     private final TenantIdentifierResolver tenantIdentifierResolver;
     private final MessageResolver messages;
 
+    @Transactional(readOnly = true)
     public IssueUserTokenResponse issueUserToken(Long chatRoomId, String externalUserId) {
 
         User user = userService.findUserByExternalId(externalUserId).orElse(null);
-        if (user == null) {
-            return new IssueUserTokenResponse.UserNotFound(messages.get("chat.token.user-not-found"));
-        }
+        if (UserTokenValidator.checkUserExists(user, messages)
+                instanceof UserTokenValidator.Check.Fail(IssueUserTokenResponse response)) return response;
 
         ChatRoom chatRoom = chatRoomService.findChatRoomById(chatRoomId).orElse(null);
-        if (chatRoom == null) {
-            return new IssueUserTokenResponse.ChatRoomNotFound(messages.get("chat.token.chatroom-not-found"));
-        }
+        if (UserTokenValidator.checkChatRoomExists(chatRoom, messages)
+                instanceof UserTokenValidator.Check.Fail(IssueUserTokenResponse response)) return response;
 
-        if (!chatRoom.getUser().getId().equals(user.getId())) {
-            return new IssueUserTokenResponse.ChatRoomAccessDenied(messages.get("chat.token.access-denied"));
-        }
+        if (UserTokenValidator.checkOwnership(chatRoom, user, messages)
+                instanceof UserTokenValidator.Check.Fail(IssueUserTokenResponse response)) return response;
 
         Long tenantId = tenantIdentifierResolver.resolveCurrentTenantIdentifier();
 
         String token = jwtProvider.createToken(chatRoomId, user.getId(), tenantId);
 
         return new IssueUserTokenResponse.Issued(new ChatRoomTokenResponse(token));
-    }
-
-    public IssueTenantTokenResponse issueTenantToken(Long chatRoomId) {
-
-        ChatRoom chatRoom = chatRoomService.findChatRoomById(chatRoomId).orElse(null);
-        if (chatRoom == null) {
-            return new IssueTenantTokenResponse.ChatRoomNotFound(messages.get("chat.token.chatroom-not-found"));
-        }
-
-        Long tenantId = tenantIdentifierResolver.resolveCurrentTenantIdentifier();
-
-        String token = jwtProvider.createToken(chatRoomId, null, tenantId);
-
-        return new IssueTenantTokenResponse.Issued(new ChatRoomTokenResponse(token));
     }
 }

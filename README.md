@@ -88,7 +88,7 @@ flowchart TD
 | Build | Gradle 8.14 |
 | ORM | Spring Data JPA + QueryDSL |
 | Realtime | Spring WebSocket (STOMP) |
-| DB | H2 (開発) |
+| DB | MySQL 8.4 |
 
 ---
 
@@ -104,17 +104,24 @@ flowchart TD
 
 ## ローカル実行
 
-### 1. `application.yml` を作成
+### 1. MySQL 8.4 を準備
+
+任意の方法（ローカルインストール、Docker、クラウドDBなど）で MySQL 8.4 を用意し、データベースを作成してください。
+
+### 2. `application.yml` を作成
 
 `src/main/resources/application.yml` ファイルを直接作成します（セキュリティのため git 除外）
 
 ```yaml
 spring:
+  sql:
+    init:
+      mode: always
   datasource:
-    url: jdbc:h2:mem:chatpaydb;MODE=MySQL;DB_CLOSE_DELAY=-1
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    url: jdbc:mysql://localhost:3306/your-database-name
+    username: your-username
+    password: your-password
+    driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
       ddl-auto: create
@@ -124,16 +131,13 @@ spring:
         format_sql: true
         jdbc:
           batch_size: 50
-  h2:
-    console:
-      enabled: true
 
 jwt:
   secret: your-secret-key-here
   expiration-ms: your-expiration-ms-here
 ```
 
-### 2. 実行
+### 3. 実行
 
 ```bash
 ./gradlew bootRun

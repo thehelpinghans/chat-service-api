@@ -526,7 +526,7 @@
             markMessagePaid(paneId, payload.chatMessageId);
         } else if (payload.messageType !== undefined) {
             // TradeCreateResponse.Created — 신규 PAYMENT_REQUEST 메시지. content 필드가 없어서
-            // ChatMessageService.createPaymentRequestMessage의 고정 문구를 그대로 채워넣음
+            // ChatMessageCreateService.createPaymentRequestMessage의 고정 문구를 그대로 채워넣음
             log('[' + label + '] 수신(PAYMENT_REQUEST, ' + describeUserId(payload.userId) + '): id=' + payload.id, 'recv');
             appendLiveMessage(paneId, {
                 id: payload.id,

@@ -12,13 +12,13 @@ import com.chatpay.common.service.UserService;
 import com.chatpay.trade.domain.Trade;
 import com.chatpay.trade.domain.TradeStatus;
 import com.chatpay.trade.domain.Wallet;
-import com.chatpay.trade.domain.WalletTransaction;
 import com.chatpay.trade.dto.PaymentResponse;
 import com.chatpay.trade.dto.TradeCreateResponse;
 import com.chatpay.trade.repository.TradeRepository;
 import com.chatpay.trade.repository.WalletRepository;
 import com.chatpay.trade.repository.WalletTransactionRepository;
-import com.chatpay.trade.service.TradeService;
+import com.chatpay.trade.service.creation.TradeCreationService;
+import com.chatpay.trade.service.payment.TradePaymentService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -49,14 +49,19 @@ import java.util.function.Supplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+// TradeCreationService(생성)와 TradePaymentService(결제)가 실제 빈으로 함께 엮여 만들어내는
+// 전체 결제 흐름(생성→결제) 자체를 검증하는 시나리오 단위 통합테스트 — 유닛 경계와는 별개로 유지.
 @SpringBootTest
-class TradeServiceIntegrationTest {
+class TradeFlowIntegrationTest {
 
     private static final String TENANT_ATTRIBUTE = "CURRENT_TENANT_ID";
     private static final Long SEED_TENANT_ID = 1L;
 
     @Autowired
-    private TradeService tradeService;
+    private TradeCreationService tradeCreationService;
+
+    @Autowired
+    private TradePaymentService tradePaymentService;
 
     @Autowired
     private ItemRepository itemRepository;
@@ -184,8 +189,8 @@ class TradeServiceIntegrationTest {
         ChatRoom chatRoom = createChatRoom("pay-test-buyer-concurrency", "pay-test-item-concurrency", "동시결제 테스트 상품", 10000L);
         User buyer = chatRoom.getUser();
         createWalletWithBalance(buyer, 10000L);
-        Long chatMessageId = assertCreated(tradeService.createTrade(chatRoom.getId(), chatRoom.getId(), null)).id();
-        Supplier<PaymentResponse> pay = () -> tradeService.payTrade(chatRoom.getId(), chatMessageId, chatRoom.getId(), buyer.getId());
+        Long chatMessageId = assertCreated(tradeCreationService.createTrade(chatRoom.getId(), chatRoom.getId(), null)).id();
+        Supplier<PaymentResponse> pay = () -> tradePaymentService.payTrade(chatRoom.getId(), chatMessageId, chatRoom.getId(), buyer.getId());
 
         // when
         ConcurrentRunResult run = runPayTradeConcurrently(List.of(pay, pay), 10);
@@ -217,8 +222,8 @@ class TradeServiceIntegrationTest {
         ChatRoom chatRoom = createChatRoom("attack-buyer-1", "attack-item-1", "동시공격 테스트 상품", 10000L);
         User buyer = chatRoom.getUser();
         createWalletWithBalance(buyer, 10000L);
-        Long chatMessageId = assertCreated(tradeService.createTrade(chatRoom.getId(), chatRoom.getId(), null)).id();
-        Supplier<PaymentResponse> pay = () -> tradeService.payTrade(chatRoom.getId(), chatMessageId, chatRoom.getId(), buyer.getId());
+        Long chatMessageId = assertCreated(tradeCreationService.createTrade(chatRoom.getId(), chatRoom.getId(), null)).id();
+        Supplier<PaymentResponse> pay = () -> tradePaymentService.payTrade(chatRoom.getId(), chatMessageId, chatRoom.getId(), buyer.getId());
 
         // when
         ConcurrentRunResult run = runPayTradeConcurrently(Collections.nCopies(attackerCount, pay), 30);
@@ -255,10 +260,10 @@ class TradeServiceIntegrationTest {
         User buyer = chatRoomA.getUser();
         ChatRoom chatRoomB = createChatRoom("attack-buyer-2", "attack-item-2b", "동시공격 테스트 상품B", 6000L);
         createWalletWithBalance(buyer, 10000L);
-        Long chatMessageIdA = assertCreated(tradeService.createTrade(chatRoomA.getId(), chatRoomA.getId(), null)).id();
-        Long chatMessageIdB = assertCreated(tradeService.createTrade(chatRoomB.getId(), chatRoomB.getId(), null)).id();
-        Supplier<PaymentResponse> payA = () -> tradeService.payTrade(chatRoomA.getId(), chatMessageIdA, chatRoomA.getId(), buyer.getId());
-        Supplier<PaymentResponse> payB = () -> tradeService.payTrade(chatRoomB.getId(), chatMessageIdB, chatRoomB.getId(), buyer.getId());
+        Long chatMessageIdA = assertCreated(tradeCreationService.createTrade(chatRoomA.getId(), chatRoomA.getId(), null)).id();
+        Long chatMessageIdB = assertCreated(tradeCreationService.createTrade(chatRoomB.getId(), chatRoomB.getId(), null)).id();
+        Supplier<PaymentResponse> payA = () -> tradePaymentService.payTrade(chatRoomA.getId(), chatMessageIdA, chatRoomA.getId(), buyer.getId());
+        Supplier<PaymentResponse> payB = () -> tradePaymentService.payTrade(chatRoomB.getId(), chatMessageIdB, chatRoomB.getId(), buyer.getId());
 
         // when
         ConcurrentRunResult run = runPayTradeConcurrently(List.of(payA, payB), 30);
@@ -299,8 +304,8 @@ class TradeServiceIntegrationTest {
             User buyer = chatRoom.getUser();
             createWalletWithBalance(buyer, 5000L);
             buyers.add(buyer);
-            Long chatMessageId = assertCreated(tradeService.createTrade(chatRoom.getId(), chatRoom.getId(), null)).id();
-            tasks.add(() -> tradeService.payTrade(chatRoom.getId(), chatMessageId, chatRoom.getId(), buyer.getId()));
+            Long chatMessageId = assertCreated(tradeCreationService.createTrade(chatRoom.getId(), chatRoom.getId(), null)).id();
+            tasks.add(() -> tradePaymentService.payTrade(chatRoom.getId(), chatMessageId, chatRoom.getId(), buyer.getId()));
         }
 
         // when

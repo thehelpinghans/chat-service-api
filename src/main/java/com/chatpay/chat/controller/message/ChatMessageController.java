@@ -4,9 +4,10 @@ import com.chatpay.chat.dto.message.FindMessagesAfterResponse;
 import com.chatpay.chat.dto.message.FindMessagesResponse;
 import com.chatpay.chat.dto.message.SendMessageResponse;
 import com.chatpay.common.broadcast.ChatRoomBroadcaster;
-import com.chatpay.common.config.TenantFilter;
+import com.chatpay.common.multitenancy.TenantFilter;
 import com.chatpay.chat.dto.message.ChatMessageRequest;
-import com.chatpay.chat.service.message.ChatMessageService;
+import com.chatpay.chat.service.message.create.ChatMessageCreateService;
+import com.chatpay.chat.service.message.find.ChatMessageFindService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -21,7 +22,8 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Chat Message", description = "채팅 메시지 전송/조회 API")
 public class ChatMessageController {
 
-    private final ChatMessageService chatMessageService;
+    private final ChatMessageCreateService chatMessageCreateService;
+    private final ChatMessageFindService chatMessageFindService;
     private final ChatRoomBroadcaster chatRoomBroadcaster;
 
     @PostMapping("/{chatRoomId}/messages")
@@ -32,7 +34,7 @@ public class ChatMessageController {
             @RequestAttribute(value = TenantFilter.CHAT_ROOM_ATTRIBUTE, required = false) Long tokenChatRoomId,
             @RequestAttribute(value = TenantFilter.USER_ATTRIBUTE, required = false) Long userId) {
 
-        SendMessageResponse response = chatMessageService.createMessage(chatRoomId, tokenChatRoomId, userId, request);
+        SendMessageResponse response = chatMessageCreateService.createMessage(chatRoomId, tokenChatRoomId, userId, request);
 
         if (response instanceof SendMessageResponse.Sent success) {
             chatRoomBroadcaster.send(chatRoomId, success);
@@ -59,7 +61,7 @@ public class ChatMessageController {
             @RequestParam(required = false) Long lastMessageId,
             @RequestParam(defaultValue = "20") int size) {
 
-        FindMessagesResponse response = chatMessageService.findMessages(chatRoomId, tokenChatRoomId, lastMessageId, size);
+        FindMessagesResponse response = chatMessageFindService.findMessages(chatRoomId, tokenChatRoomId, lastMessageId, size);
 
         return switch (response) {
 
@@ -77,7 +79,7 @@ public class ChatMessageController {
             @RequestParam Long afterMessageId,
             @RequestParam(defaultValue = "20") int size) {
 
-        FindMessagesAfterResponse response = chatMessageService.findMessagesAfter(chatRoomId, tokenChatRoomId, afterMessageId, size);
+        FindMessagesAfterResponse response = chatMessageFindService.findMessagesAfter(chatRoomId, tokenChatRoomId, afterMessageId, size);
 
         return switch (response) {
             case FindMessagesAfterResponse.Found r -> ResponseEntity.ok(r);

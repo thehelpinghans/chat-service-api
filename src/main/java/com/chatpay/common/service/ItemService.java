@@ -26,4 +26,9 @@ public class ItemService {
 
         return itemRepository.save(Item.create(externalItemId, itemName, itemPrice));
     }
+
+    @Transactional(readOnly = true)
+    public Optional<Item> findItemById(Long itemId) {
+        return itemRepository.findById(itemId);
+    }
 }
