@@ -10,5 +10,4 @@ public interface TradeRepository extends JpaRepository<Trade, Long> {
     Optional<Trade> findByChatMessageId(Long chatMessageId);
 
     Optional<Trade> findByChatRoomIdAndTradeStatus(Long id, TradeStatus tradeStatus);
-
 }

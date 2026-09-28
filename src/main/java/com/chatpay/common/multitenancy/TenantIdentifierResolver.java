@@ -1,4 +1,4 @@
-package com.chatpay.common.config;
+package com.chatpay.common.multitenancy;
 
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.context.spi.CurrentTenantIdentifierResolver;
@@ -19,16 +19,20 @@ public class TenantIdentifierResolver
     public Long resolveCurrentTenantIdentifier() {
         RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
 
-        if (requestAttributes == null) {
-            return 0L;
+        if (requestAttributes != null) {
+            //실제 HTTP 요청
+            Long tenantId = (Long) requestAttributes.getAttribute(TENANT_ATTRIBUTE, RequestAttributes.SCOPE_REQUEST);
+            if (tenantId != null) {
+                return tenantId;
+            }
         }
-        //실제 HTTP 요청
-        Long tenantId = (Long) requestAttributes.getAttribute(TENANT_ATTRIBUTE, RequestAttributes.SCOPE_REQUEST);
 
-        if (tenantId == null) {
+        // HTTP 요청이 없는 실행 컨텍스트(스케줄러 등)를 위한 폴백
+        Long backgroundTenantId = BackgroundTenantContextHolder.get();
+        if (backgroundTenantId == null) {
             return 0L;
         }
-        return tenantId;
+        return backgroundTenantId;
     }
 
     @Override

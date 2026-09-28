@@ -9,6 +9,7 @@ import com.chatpay.trade.domain.Wallet;
 import com.chatpay.trade.dto.PaymentResponse;
 import com.chatpay.trade.repository.TradeRepository;
 import com.chatpay.trade.service.wallet.WalletService;
+import com.chatpay.trade.service.webhook.TradeWebhookRetryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ public class TradePaymentService {
     private final TradeRepository tradeRepository;
     private final WalletService walletService;
     private final MessageResolver messages;
+    private final TradeWebhookRetryService tradeWebhookRetryService;
 
     @Transactional
     public PaymentResponse payTrade(Long chatRoomId, Long chatMessageId, Long tokenChatRoomId, Long userId) {
@@ -48,6 +50,8 @@ public class TradePaymentService {
         currentTrade.changeStatus(TradeStatus.PAID);
 
         walletService.recordPayment(wallet, currentTrade, currentTrade.getAmount());
+
+        tradeWebhookRetryService.registerImmediateDelivery(currentTrade.getId());
 
         log.info("Payment completed: chatMessageId={}, tradeId={}", chatMessageId, currentTrade.getId());
         return new PaymentResponse.PaymentSuccess(chatMessageId, currentTrade.getTradeStatus());

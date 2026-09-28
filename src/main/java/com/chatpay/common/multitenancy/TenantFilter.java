@@ -1,5 +1,6 @@
-package com.chatpay.common.config;
+package com.chatpay.common.multitenancy;
 
+import com.chatpay.common.config.JwtProvider;
 import com.chatpay.common.domain.Tenant;
 import com.chatpay.common.domain.TenantStatus;
 import com.chatpay.common.repository.TenantRepository;
@@ -48,8 +49,8 @@ public class TenantFilter implements Filter {
         HttpServletRequest httpRequest = (HttpServletRequest) request;
         HttpServletResponse httpResponse = (HttpServletResponse) response;
 
-        // 개발용 경로 bypass: H2 Console, Swagger UI, OpenAPI 스펙, WebSocket
-        if (httpRequest.getRequestURI().matches("^/(h2-console|swagger-ui.*|v3/api-docs|.*\\.html|ws.*).*")) {
+        // 개발용 경로 bypass: Swagger UI, OpenAPI 스펙, WebSocket
+        if (httpRequest.getRequestURI().matches("^/(swagger-ui.*|v3/api-docs|.*\\.html|ws.*).*")) {
             chain.doFilter(request, response);
             return;
         }

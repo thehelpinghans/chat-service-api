@@ -10,7 +10,7 @@
 - [x] マルチテナント分離・BOLA対策
 - [x] 決済リクエスト生成・処理（PENDING → PAID）
 - [x] 埋め込みSDK（sdk.js / room-auth.js）
-- [ ] Webhook通知（PAID → COMPLETED）
+- [x] Webhook通知（PAID → COMPLETED、指数バックオフによる自動再試行付き）
 - [ ] 取消・返金API
 - [ ] 埋め込みUI（room.html、フロント側で別途実装予定）
 

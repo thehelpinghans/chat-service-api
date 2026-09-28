@@ -14,6 +14,7 @@ import com.chatpay.trade.domain.Wallet;
 import com.chatpay.trade.dto.PaymentResponse;
 import com.chatpay.trade.repository.TradeRepository;
 import com.chatpay.trade.service.wallet.WalletService;
+import com.chatpay.trade.service.webhook.TradeWebhookRetryService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +44,8 @@ class TradePaymentServiceTest {
     private WalletService walletService;
     @Mock
     private MessageResolver messages;
+    @Mock
+    private TradeWebhookRetryService tradeWebhookRetryService;
 
     private TradePaymentService tradePaymentService;
 
@@ -51,7 +54,7 @@ class TradePaymentServiceTest {
     private final ChatRoom chatRoom = Fixture.createChatRoom(1L, buyer, item);
 
     private TradePaymentService newTradePaymentService() {
-        return new TradePaymentService(chatMessageFindService, tradeRepository, walletService, messages);
+        return new TradePaymentService(chatMessageFindService, tradeRepository, walletService, messages, tradeWebhookRetryService);
     }
 
     @Test
@@ -65,7 +68,7 @@ class TradePaymentServiceTest {
 
         // then
         assertThat(response).isInstanceOf(PaymentResponse.ChatRoomAccessDenied.class);
-        verifyNoInteractions(chatMessageFindService, tradeRepository, walletService);
+        verifyNoInteractions(chatMessageFindService, tradeRepository, walletService, tradeWebhookRetryService);
     }
 
     @Test
@@ -80,7 +83,7 @@ class TradePaymentServiceTest {
 
         // then
         assertThat(response).isInstanceOf(PaymentResponse.PaymentNotFound.class);
-        verifyNoInteractions(tradeRepository, walletService);
+        verifyNoInteractions(tradeRepository, walletService, tradeWebhookRetryService);
     }
 
     @Test
@@ -97,7 +100,7 @@ class TradePaymentServiceTest {
 
         // then
         assertThat(response).isInstanceOf(PaymentResponse.PaymentNotFound.class);
-        verifyNoInteractions(walletService);
+        verifyNoInteractions(walletService, tradeWebhookRetryService);
     }
 
     @Test
@@ -118,10 +121,11 @@ class TradePaymentServiceTest {
         assertThat(response).isInstanceOf(PaymentResponse.WalletNotFound.class);
         verify(walletService, never()).debit(any(), anyLong());
         verify(walletService, never()).recordPayment(any(), any(), anyLong());
+        verifyNoInteractions(tradeWebhookRetryService);
     }
 
     @Test
-    @DisplayName("決済成功時の処理順序(残高差引→ステータス変更→履歴記録)")
+    @DisplayName("決済成功時の処理順序(残高差引→ステータス変更→履歴記録→webhook登録)")
     void paysSuccessfullyInCorrectOrder() {
         // given
         ChatMessage message = Fixture.createChatMessage(1L, chatRoom, null, "결제 요청", MessageType.PAYMENT_REQUEST);
@@ -146,9 +150,10 @@ class TradePaymentServiceTest {
         // wallet.pay()/flush()는 이제 WalletService 내부(debit/recordPayment)로 옮겨져서
         // 여기(TradePaymentService 테스트)에서는 "그 순서로 위임했는가"만 확인 — 실제 데드락 회피는
         // WalletServiceTest.recordPayment 검증 + TradeFlowIntegrationTest가 담당.
-        InOrder order = inOrder(walletService);
+        InOrder order = inOrder(walletService, tradeWebhookRetryService);
         order.verify(walletService).debit(wallet, 10000L);
         order.verify(walletService).recordPayment(wallet, trade, 10000L);
+        order.verify(tradeWebhookRetryService).registerImmediateDelivery(trade.getId());
     }
 
     @Test
@@ -172,6 +177,7 @@ class TradePaymentServiceTest {
         assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.PENDING);
         verify(walletService, never()).debit(any(), anyLong());
         verify(walletService, never()).recordPayment(any(), any(), anyLong());
+        verifyNoInteractions(tradeWebhookRetryService);
     }
 
     @Test
@@ -189,6 +195,6 @@ class TradePaymentServiceTest {
 
         // then
         assertThat(response).isInstanceOf(PaymentResponse.PaymentAlreadyProcessed.class);
-        verifyNoInteractions(walletService);
+        verifyNoInteractions(walletService, tradeWebhookRetryService);
     }
 }

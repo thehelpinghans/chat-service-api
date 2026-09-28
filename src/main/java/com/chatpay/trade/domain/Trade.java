@@ -77,4 +77,11 @@ public class Trade extends BaseEntity {
         }
         this.tradeStatus = tradeStatus;
     }
+
+    public void completeDelivery() {
+        if (this.tradeStatus != TradeStatus.PAID) {
+            throw new IllegalStateException("Trade must be PAID to complete delivery, but was: " + this.tradeStatus);
+        }
+        this.tradeStatus = TradeStatus.COMPLETED;
+    }
 }

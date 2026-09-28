@@ -1,10 +1,11 @@
 package com.chatpay.trade.controller;
 
 import com.chatpay.common.broadcast.ChatRoomBroadcaster;
-import com.chatpay.common.config.TenantFilter;
+import com.chatpay.common.multitenancy.TenantFilter;
 import com.chatpay.trade.dto.PaymentResponse;
 import com.chatpay.trade.dto.TradeCreateResponse;
-import com.chatpay.trade.service.TradeService;
+import com.chatpay.trade.service.creation.TradeCreationService;
+import com.chatpay.trade.service.payment.TradePaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,8 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Trade API", description = "결제 요청 생성 API")
 public class TradeController {
 
-    private final TradeService tradeService;
+    private final TradeCreationService tradeCreationService;
+    private final TradePaymentService tradePaymentService;
     private final ChatRoomBroadcaster chatRoomBroadcaster;
 
     @PostMapping("/{chatRoomId}/trades")
@@ -28,7 +30,7 @@ public class TradeController {
             @RequestAttribute(value = TenantFilter.CHAT_ROOM_ATTRIBUTE, required = false) Long tokenChatRoomId,
             @RequestAttribute(value = TenantFilter.USER_ATTRIBUTE, required = false) Long userId) {
 
-        TradeCreateResponse response = tradeService.createTrade(chatRoomId, tokenChatRoomId, userId);
+        TradeCreateResponse response = tradeCreationService.createTrade(chatRoomId, tokenChatRoomId, userId);
 
         if (response instanceof TradeCreateResponse.Created success) {
             chatRoomBroadcaster.send(chatRoomId, success);
@@ -55,7 +57,7 @@ public class TradeController {
             @RequestAttribute(value = TenantFilter.CHAT_ROOM_ATTRIBUTE, required = false) Long tokenChatRoomId,
             @RequestAttribute(value = TenantFilter.USER_ATTRIBUTE, required = false) Long userId) {
 
-        PaymentResponse response = tradeService.payTrade(chatRoomId, chatMessageId, tokenChatRoomId, userId);
+        PaymentResponse response = tradePaymentService.payTrade(chatRoomId, chatMessageId, tokenChatRoomId, userId);
 
         if (response instanceof PaymentResponse.PaymentSuccess success) {
             chatRoomBroadcaster.send(chatRoomId, success);

@@ -48,7 +48,7 @@ public class WalletTransaction {
     // 호출부는 항상 양수(절대값)로 넘김 — 부호는 여기서 고정하므로 타입-부호 조합이 어긋날 수 없음
     public static WalletTransaction createPayment(Wallet wallet, Trade trade, Long amount) {
         if (amount == null || amount <= 0) {
-            throw new IllegalArgumentException("WalletTransaction amount는 양수(절대값)로 전달해야 함: amount=" + amount);
+            throw new IllegalArgumentException("WalletTransaction amount must be a positive value (absolute value): amount=" + amount);
         }
         WalletTransaction walletTransaction = new WalletTransaction();
         walletTransaction.wallet = wallet;
@@ -60,7 +60,7 @@ public class WalletTransaction {
 
     public static WalletTransaction createRefund(Wallet wallet, Trade trade, Long amount) {
         if (amount == null || amount <= 0) {
-            throw new IllegalArgumentException("WalletTransaction amount는 양수(절대값)로 전달해야 함: amount=" + amount);
+            throw new IllegalArgumentException("WalletTransaction amount must be a positive value (absolute value): amount=" + amount);
         }
         WalletTransaction walletTransaction = new WalletTransaction();
         walletTransaction.wallet = wallet;
